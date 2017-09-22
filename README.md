@@ -1,3 +1,5 @@
+[![Hex version](https://img.shields.io/hexpm/v/cfg.svg "Hex version")](https://hex.pm/packages/cfg)
+
 # Simple and modern config parser
 **cfg** is a config parser for parsing `.cfg` files and converting cfg file data to different Erlang terms.
 
