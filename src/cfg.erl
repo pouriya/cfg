@@ -33,7 +33,7 @@
 %% @author   Pouriya Jahanbakhsh <pouriya.jahanbakhsh@gmail.com>
 %% @version  17.9.22
 %% @doc
-%%           Modern cfg parser.
+%%           Simple and modern config parser.
 %% @end
 %% -------------------------------------------------------------------------------------------------
 -module(cfg).

@@ -1,11 +1,11 @@
-# Modern cfg parser
-**cfg** is a modern config parser for parsing `.cfg` files and converting cfg file data to different Erlang terms.  
+# Simple and modern config parser
+**cfg** is a config parser for parsing `.cfg` files and converting cfg file data to different Erlang terms.
 
 ## Features
 * Parsing file and returning its data as proplist.
 * Parsing file and inserting its data in an ETS table.  
 * Parsing file and setting its data as environment variables of an application.  
-* Parsing file and calls a callback for every value which it found in file.
+* Parsing file and calls a callback for every value which it founds in file.
 * Providing clean and human-readable reason for errors.
 
 ## Example

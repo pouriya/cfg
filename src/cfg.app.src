@@ -1,6 +1,6 @@
 {application
 ,cfg
-,[{description, "Modern cfg parser"}
+,[{description, "Simple and modern config parser"}
  ,{vsn, "17.9.22"}
  ,{applications, [kernel, stdlib]}
  ,{modules, [cfg, cfg_parser]}
