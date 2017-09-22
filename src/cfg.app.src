@@ -1,0 +1,9 @@
+{application
+,cfg
+,[{description, "Modern cfg parser"}
+ ,{vsn, "17.9.22"}
+ ,{applications, [kernel, stdlib]}
+ ,{modules, [cfg, cfg_parser]}
+ ,{maintainers, ["pouriya.jahanbakhsh@gmail.com"]}
+ ,{licenses, ["BSD 3-Clause"]}
+ ,{links, [{"GitHub", "https://github.com/Pouriya-Jahanbakhsh/cfg"}]}]}.
