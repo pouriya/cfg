@@ -257,9 +257,9 @@ to_value(Arg) ->
         undefined ->
             case {binary:first(Arg), binary:last(Arg)} of
                 {$", $"} ->
-                    binary:part(Arg, 1, erlang:byte_size(Arg)-2);
+                    erlang:binary_to_list(binary:part(Arg, 1, erlang:byte_size(Arg)-2));
                 {$', $'} ->
-                    binary:part(Arg, 1, erlang:byte_size(Arg)-2);
+                    erlang:binary_to_atom(binary:part(Arg, 1, erlang:byte_size(Arg)-2), utf8);
                 _ ->
                     Arg
             end;
