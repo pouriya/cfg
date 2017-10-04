@@ -29,7 +29,8 @@ foo = bar
 #        ,atom
 #        ,other_atom_because_of_underline
 #        ,atom@with@at@sing
-#        ,<<"binary_because_of_qoutation">>
+#        ,'atom because of apostrophe'
+#        ,"string_because_of_qoutation"
 #        ,<<"binary because of space">>
 #        ,<<"Binary_because_of_B_at_the_first">>
 #        ,<<"@binary_because_of_@_at_the_first">>
@@ -43,7 +44,8 @@ false
 atom
 other_atom_because_of_underline
 atom@with@at@sing
-"binary_because_of_qoutation"
+'atom because of apostrophe'
+"string_because_of_qoutation"
 Binary_because_of_B_at_the_first
 @binary_because_of_@_at_the_first
 _binary_because_of_underline_at_the_first
@@ -68,7 +70,8 @@ Eshell V8.3  (abort with ^G)
 {ok,[{foo,bar},
      {list,[true,false,0,3.14,-1,atom,
             other_atom_because_of_underline,atom@with@at@sing,
-            <<"binary_because_of_qoutation">>,
+            'atom because of apostrophe',
+            "string_because_of_qoutation",
             <<"Binary_because_of_B_at_the_first">>,
             <<"@binary_because_of_@_at_the_first">>,
             <<"_binary_because_of_underline_at_the_first">>]},
@@ -84,7 +87,8 @@ ok
 4> application:get_all_env(cfg). 
 [{list,[true,false,0,3.14,-1,atom,
         other_atom_because_of_underline,atom@with@at@sing,
-        <<"binary_because_of_qoutation">>,
+        'atom because of apostrophe',
+        "string_because_of_qoutation",
         <<"Binary_because_of_B_at_the_first">>,
         <<"@binary_because_of_@_at_the_first">>,
         <<"_binary_because_of_underline_at_the_first">>]},
@@ -100,7 +104,8 @@ ok
 [{list2,[{bar,baz},{qux,true}]},
  {list,[true,false,0,3.14,-1,atom,
         other_atom_because_of_underline,atom@with@at@sing,
-        <<"binary_because_of_qoutation">>,
+        'atom because of apostrophe',
+        "string_because_of_qoutation",
         <<"Binary_because_of_B_at_the_first">>,
         <<"@binary_because_of_@_at_the_first">>,
         <<"_binary_because_of_underline_at_the_first">>]},
@@ -119,7 +124,8 @@ ok
 9> flush().
 Shell got {foo,bar,5}
 Shell got {list,[true,false,0,3.14,-1,atom,other_atom_because_of_underline,
-                 atom@with@at@sing,<<"binary_because_of_qoutation">>,
+                 atom@with@at@sing,'atom because of apostrophe',
+                 "string_because_of_qoutation",
                  <<"Binary_because_of_B_at_the_first">>,
                  <<"@binary_because_of_@_at_the_first">>,
                  <<"_binary_because_of_underline_at_the_first">>],
