@@ -31,7 +31,7 @@
 %%% POSSIBILITY OF SUCH DAMAGE.
 %%% ------------------------------------------------------------------------------------------------
 %% @author   Pouriya Jahanbakhsh <pouriya.jahanbakhsh@gmail.com>
-%% @version  17.9.22
+%% @version  17.10.4
 %% -------------------------------------------------------------------------------------------------
 -module(cfg_parser).
 -author("pouriya.jahanbakhsh@gmail.com").
