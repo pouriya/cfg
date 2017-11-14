@@ -125,29 +125,14 @@ format_error({atom(), [] | [{atom(), term()}]}) ->
 %%      Formats returned error of parse/1 and parse/2 binary for making it more human-readable.
 %% @end
 format_error({Reason, ErrParams}) when erlang:is_atom(Reason) andalso erlang:is_list(ErrParams) ->
-    AtomToBin =
-        fun(Atom) ->
-            binary:replace(<<(erlang:atom_to_binary(Atom, utf8))/bits>>
-                          ,<<"_">>
-                          ,<<" ">>
-                          ,[global])
-        end,
     Fold =
         fun
             ({Key, Val}, Acc) when erlang:is_atom(Val) ->
-                <<Acc/bits, "\t"
-                ,(AtomToBin(Key))/bits
-                ,": "
-                ,(AtomToBin(Val))/bits
-                ,"\n">>;
+                Acc ++ "\t" ++ erlang:atom_to_list(Key) ++ ": " ++ erlang:atom_to_list(Val) ++ "\n";
             ({Key, Val}, Acc) ->
-                <<Acc/bits, "\t"
-                ,(AtomToBin(Key))/bits
-                ,": "
-                ,(erlang:list_to_binary(io_lib:print(Val)))/bits
-                ,"\n">>
+                Acc ++ "\t" ++ erlang:atom_to_list(Key) ++ ": " ++ io_lib:print(Val) ++ "\n"
         end,
-    lists:foldl(Fold, <<"Error: ", (AtomToBin(Reason))/bits, "\nDetails:\n">>, ErrParams).
+    lists:foldl(Fold, "Error: " ++ erlang:atom_to_list(Reason) ++ "\nDetails:\n", ErrParams).
 
 %% -------------------------------------------------------------------------------------------------
 %% Internal functions:
@@ -162,10 +147,10 @@ create_table(Tab, Opts) ->
                 {_, Self} ->
                     ok;
                 {Protection, Owner} ->
-                    {error, {table_protection_or_ownership, [{protection, Protection}
-                                                            ,{owner, Owner}
-                                                            ,{table, Tab}
-                                                            ,{self, Self}]}}
+                    {error, {table, [{protection, Protection}
+                                    ,{owner, Owner}
+                                    ,{table, Tab}
+                                    ,{self, Self}]}}
             end;
         false ->
             try
@@ -233,7 +218,7 @@ insert(Data, File, InsertMode) ->
                                              ,{value, Val}
                                              ,{line, LineNumber}
                                              ,{application, AppName}
-                                             ,{set_environment_options, SetEnvOpts}
+                                             ,{options, SetEnvOpts}
                                              ,{file, File}
                                              ,{stacktrace, erlang:get_stacktrace()}]}}
                     end

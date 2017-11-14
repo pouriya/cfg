@@ -73,9 +73,9 @@ read_file(File) ->
         {ok, _}=Ok ->
             Ok;
         {error, Reason} ->
-            {error, {read_file, [{reason, Reason}
-                                ,{info, file:format_error(Reason)}
-                                ,{file, File}]}}
+            {error, {file, [{reason, Reason}
+                           ,{info, file:format_error(Reason)}
+                           ,{file, File}]}}
     end.
 
 
@@ -115,8 +115,6 @@ is_comment_line(_) ->
 
 parse_lines([{LineNumber, LineData}|Lines], undefined, Ret) ->
     case parse_line(LineData) of
-        {ok, {var, '', ''}} ->
-            {error, {variable_and_value_not_found, [{line, LineNumber}]}};
         {ok, {var, '', Val}} ->
             {error, {variable_not_found, [{line, LineNumber}, {value, Val}]}};
         {ok, {var, Var, ''}} ->
@@ -129,9 +127,13 @@ parse_lines([{LineNumber, LineData}|Lines], undefined, Ret) ->
                     {error, {repeated_var, [{var, Var}
                                            ,{line, LineNumber}
                                            ,{value, Val}
-                                           ,{repeated_line, LineNumber2}
-                                           ,{repeated_with_value, Val2}]}}
+                                           ,{info, "repeated in line " ++
+                                                   erlang:integer_to_list(LineNumber2) ++
+                                                   " with value " ++
+                                                   io_lib:print(Val2)}]}}
             end;
+        {ok, {start_list, ''}} ->
+            {error, {list_not_found, [{line, LineNumber}]}};
         {ok, {start_list, ListName}} ->
             case lists:keyfind(ListName, 1, Ret) of
                 false ->
@@ -139,15 +141,17 @@ parse_lines([{LineNumber, LineData}|Lines], undefined, Ret) ->
                 {_, Val2, LineNumber2} ->
                     {error, {repeated_list, [{list_name, ListName}
                                             ,{line, LineNumber}
-                                            ,{repeated_line, LineNumber2}
-                                            ,{repeated_with_value, Val2}]}}
+                                            ,{info, "repeated in line " ++
+                                                    erlang:integer_to_list(LineNumber2) ++
+                                                    " with value " ++
+                                                    io_lib:print(Val2)}]}}
             end;
         {ok, {list_value, Val}} ->
-            {error, {syntax, [{reason, found_unwanted_list_value}
+            {error, {syntax, [{reason, "found unwanted list value"}
                              ,{value, Val}
                              ,{line, LineNumber}]}};
         {ok, end_list} ->
-            {error, {syntax, [{reason, found_unwanted_closing_list_character}
+            {error, {syntax, [{reason, "found unwanted closing list character"}
                              ,{line, LineNumber}]}};
         {error, Reason} ->
             {error, {syntax, [{reason, Reason}
@@ -171,8 +175,8 @@ parse_lines([{LineNumber, LineData}|Lines], {ListName, ListVals, ListLineNumber}
         {ok, {var, Var, Val}} ->
             parse_lines(Lines, {ListName, [{Var, Val}|ListVals], ListLineNumber}, Ret);
         {ok, {start_list, ListNam2}} ->
-            {error, {syntax, [{reason, found_unwanted_list_declaration}
-                             ,{list_name, ListNam2}
+            {error, {syntax, [{reason, "found unwanted list declaration"}
+                             ,{list, ListNam2}
                              ,{line, LineNumber}]}};
         {error, Reason} ->
             {error, {syntax, [{reason, Reason}
@@ -181,8 +185,8 @@ parse_lines([{LineNumber, LineData}|Lines], {ListName, ListVals, ListLineNumber}
 parse_lines([], undefined, Ret) ->
     {ok, lists:reverse(Ret)};
 parse_lines([], {ListName, _, ListLineNumber}, _Ret) ->
-    {error, {syntax, [{found_unclosed_list}
-                     ,{list_name, ListName}
+    {error, {syntax, [{reason, "found unclosed list"}
+                     ,{list, ListName}
                      ,{line, ListLineNumber}]}}.
 
 
@@ -193,9 +197,9 @@ parse_line(<<$<:8, _/bits>>) ->
 parse_line(Line) ->
     case binary:split(Line, <<"=">>) of
         [Var, Val] ->
-            {ok, {var, to_variable(trim(Var)), to_value(trim(Val))}};
+            {ok, {var, decode(trim(Var)), decode(trim(Val))}};
         _ ->
-            {ok, {list_value, to_value(trim(Line))}}
+            {ok, {list_value, decode(trim(Line))}}
     end.
 
 
@@ -207,7 +211,7 @@ to_variable(Arg) ->
     erlang:binary_to_atom(Arg, utf8).
 
 
-to_value(Arg) ->
+decode(Arg) ->
     BoolRes =
         if
             Arg == <<"true">> ->
@@ -256,9 +260,9 @@ to_value(Arg) ->
     case AtomRes of
         undefined ->
             case {binary:first(Arg), binary:last(Arg)} of
-                {$", $"} ->
+                {$", $"} when erlang:byte_size(Arg) > 1 ->
                     erlang:binary_to_list(binary:part(Arg, 1, erlang:byte_size(Arg)-2));
-                {$', $'} ->
+                {$', $'} when erlang:byte_size(Arg) > 1 ->
                     erlang:binary_to_atom(binary:part(Arg, 1, erlang:byte_size(Arg)-2), utf8);
                 _ ->
                     Arg
