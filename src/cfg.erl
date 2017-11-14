@@ -31,7 +31,7 @@
 %%% POSSIBILITY OF SUCH DAMAGE.
 %%% ------------------------------------------------------------------------------------------------
 %% @author   Pouriya Jahanbakhsh <pouriya.jahanbakhsh@gmail.com>
-%% @version  17.10.4
+%% @version  17.11.14
 %% @doc
 %%           Simple and modern config parser.
 %% @end
