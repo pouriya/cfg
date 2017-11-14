@@ -15,26 +15,8 @@ I want to parse following config file named `test.cfg`.
 ```cfg
 # This is a comment
 
-
-# in Erlang blow line will convert to {foo, bar}
 foo = bar
 
-
-# in Erlang blow data will convert to:
-# {list, [true
-#        ,false
-#        ,0
-#        ,3.14
-#        ,-1
-#        ,atom
-#        ,other_atom_because_of_underline
-#        ,atom@with@at@sing
-#        ,'atom because of apostrophe'
-#        ,"string_because_of_qoutation"
-#        ,<<"binary because of space">>
-#        ,<<"Binary_because_of_B_at_the_first">>
-#        ,<<"@binary_because_of_@_at_the_first">>
-#        ,<<"_binary_because_of_underline_at_the_first">>]}
 > list
 true
 false
@@ -51,11 +33,6 @@ Binary_because_of_B_at_the_first
 _binary_because_of_underline_at_the_first
 <
 
-
-
-# In Erlang blow line will convert to:
-# {list2 ,[{bar, baz}, {qux, true}]}
-# because there is a key-value in list value of list2 will be proplist.
 > list2
 bar = baz
 qux
@@ -70,58 +47,42 @@ Eshell V8.3  (abort with ^G)
 {ok,[{foo,bar},
      {list,[true,false,0,3.14,-1,atom,
             other_atom_because_of_underline,atom@with@at@sing,
-            'atom because of apostrophe',
-            "string_because_of_qoutation",
+            'atom because of apostrophe',"string_because_of_qoutation",
             <<"Binary_because_of_B_at_the_first">>,
             <<"@binary_because_of_@_at_the_first">>,
-            <<"_binary_because_of_underline_at_the_first">>]},
-     {list2,[{bar,baz},{qux,true}]}]}
+            <<"_binary_because_of_underline_at_the_firs"...>>]},
+     {list2,[{"foo",bar},{qux,true}]}]}
 
-%% For examle i will add values of "test.cfg" in environment variables of cfg app:
 2> cfg:parse("test.cfg", {app, cfg}).
 ok
 
 3> application:get_env(cfg, foo).
 {ok,bar}
-
-4> application:get_all_env(cfg). 
-[{list,[true,false,0,3.14,-1,atom,
-        other_atom_because_of_underline,atom@with@at@sing,
-        'atom because of apostrophe',
-        "string_because_of_qoutation",
-        <<"Binary_because_of_B_at_the_first">>,
-        <<"@binary_because_of_@_at_the_first">>,
-        <<"_binary_because_of_underline_at_the_first">>]},
- {foo,bar},
- {list2,[{bar,baz},{qux,true}]}]
-
-%% For example i will insert values of "test.cfg" in ETS table "my_config"
-%% If table does not exist, cfg will create it, if exists, should be public.
-5> cfg:parse("test.cfg", {ets, my_config}).
+ 
+4> cfg:parse("test.cfg", {ets, my_config}).
 ok
 
-6> ets:tab2list(my_config).   
-[{list2,[{bar,baz},{qux,true}]},
+5> ets:tab2list(my_config).
+[{list2,[{"foo",bar},{qux,true}]},
  {list,[true,false,0,3.14,-1,atom,
         other_atom_because_of_underline,atom@with@at@sing,
-        'atom because of apostrophe',
-        "string_because_of_qoutation",
+        'atom because of apostrophe',"string_because_of_qoutation",
         <<"Binary_because_of_B_at_the_first">>,
         <<"@binary_because_of_@_at_the_first">>,
         <<"_binary_because_of_underline_at_the_first">>]},
  {foo,bar}]
 
-%% Callback can be {Mod, Func} which Func should accept 3 arguments.
-%% It can be a fun with arity 3 too.
-%% First argument is Key, second is its value and last argument is line number of data.
-%% Here i make a fun, and send key, value and line number to myself as Erlang message.
-7> F = fun(Key, Val, LineNumber) -> self() ! {Key, Val, LineNumber} end.
-#Fun<erl_eval.18.118419387>
+6> %% Callback can be {Mod, Func} which Func should accept 3 arguments.
+6> %% It can be a fun with arity 3 too.
+6> %% First argument is Key, second is its value and last argument is line number of data.
+6> %% Here i make a fun, and send key, value and line number to myself as Erlang message.
+6> F = fun(Key, Val, LineNumber) -> self() ! {Key, Val, LineNumber} end.   
+#Fun<erl_eval.18.52032458>
 
-8> cfg:parse("test.cfg", {callback, F}).                                
+7> cfg:parse("test.cfg", {callback, F}).                                
 ok
 
-9> flush().
+8> flush().
 Shell got {foo,bar,5}
 Shell got {list,[true,false,0,3.14,-1,atom,other_atom_because_of_underline,
                  atom@with@at@sing,'atom because of apostrophe',
@@ -129,20 +90,20 @@ Shell got {list,[true,false,0,3.14,-1,atom,other_atom_because_of_underline,
                  <<"Binary_because_of_B_at_the_first">>,
                  <<"@binary_because_of_@_at_the_first">>,
                  <<"_binary_because_of_underline_at_the_first">>],
-                22}
-Shell got {list2,[{bar,baz},{qux,true}],42}
+                23}
+Shell got {list2,[{"foo",bar},{qux,true}],42}
 ok
 
 %% In "test.cfg" i change "foo = bar" to "foo = " for getting error
-10> {error, Reason} = cfg:parse("test.cfg", {callback, F}).
-{error,{value_not_found,[{line,5},
+9> {error, Rsn} = cfg:parse("test.cfg").                                                                 
+{error,{value_not_found,[{line,3},
                          {variable,foo},
                          {file,"test.cfg"}]}}
 
-11> io:format("~s", [cfg:format_error(Reason)]).
-Error: value not found
+10> io:format(cfg:format_error(Rsn)).
+Error: value_not_found
 Details:
-        line: 5
+        line: 3
         variable: foo
         file: "test.cfg"
 ok
@@ -150,3 +111,6 @@ ok
 
 ## License
 `BSD 3-Clause`
+
+## Author
+`pouriya.jahanbakhsh@gmail.com`
