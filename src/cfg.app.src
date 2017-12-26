@@ -1,7 +1,7 @@
 {application
 ,cfg
 ,[{description, "Simple and modern config parser"}
- ,{vsn, "17.11.14"}
+ ,{vsn, "17.12.26"}
  ,{applications, [kernel, stdlib]}
  ,{modules, [cfg, cfg_parser]}
  ,{maintainers, ["pouriya.jahanbakhsh@gmail.com"]}
