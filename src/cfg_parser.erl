@@ -147,11 +147,11 @@ parse_lines([{LineNumber, LineData}|Lines], undefined, Ret) ->
                                                     io_lib:print(Val2)}]}}
             end;
         {ok, {list_value, Val}} ->
-            {error, {syntax, [{reason, "found unwanted list value"}
+            {error, {syntax, [{reason, "found unwanted list or map value"}
                              ,{value, Val}
                              ,{line, LineNumber}]}};
         {ok, end_list} ->
-            {error, {syntax, [{reason, "found unwanted closing list character"}
+            {error, {syntax, [{reason, "found unwanted closing list or map character"}
                              ,{line, LineNumber}]}};
         {error, Reason} ->
             {error, {syntax, [{reason, Reason}
@@ -162,12 +162,11 @@ parse_lines([{LineNumber, LineData}|Lines], {ListName, ListVals, ListLineNumber}
         {ok, {list_value, Val}} ->
             parse_lines(Lines, {ListName, [Val|ListVals], ListLineNumber}, Ret);
         {ok, end_list} ->
+            ListVals2 = maybe_convert_to_proplist(lists:reverse(ListVals)),
+            {ListName2, ListVals3} = maybe_convert_to_map(ListName, ListVals2),
             parse_lines(Lines
                        ,undefined
-                       ,[{ListName
-                         ,maybe_convert_to_proplist(lists:reverse(ListVals))
-                         ,ListLineNumber}
-                        |Ret]);
+                       ,[{ListName2, ListVals3, ListLineNumber} | Ret]);
         {ok, {var, '', Val}} ->
             {error, {variable_not_found, [{line, LineNumber}, {value, Val}]}};
         {ok, {var, Var, ''}} ->
@@ -175,8 +174,8 @@ parse_lines([{LineNumber, LineData}|Lines], {ListName, ListVals, ListLineNumber}
         {ok, {var, Var, Val}} ->
             parse_lines(Lines, {ListName, [{Var, Val}|ListVals], ListLineNumber}, Ret);
         {ok, {start_list, ListNam2}} ->
-            {error, {syntax, [{reason, "found unwanted list declaration"}
-                             ,{list, ListNam2}
+            {error, {syntax, [{reason, "found unwanted list or map declaration"}
+                             ,{variable, ListNam2}
                              ,{line, LineNumber}]}};
         {error, Reason} ->
             {error, {syntax, [{reason, Reason}
@@ -185,13 +184,13 @@ parse_lines([{LineNumber, LineData}|Lines], {ListName, ListVals, ListLineNumber}
 parse_lines([], undefined, Ret) ->
     {ok, lists:reverse(Ret)};
 parse_lines([], {ListName, _, ListLineNumber}, _Ret) ->
-    {error, {syntax, [{reason, "found unclosed list"}
-                     ,{list, ListName}
+    {error, {syntax, [{reason, "found unclosed list or map"}
+                     ,{variable, ListName}
                      ,{line, ListLineNumber}]}}.
 
 
 parse_line(<<$>:8, Rest/bits>>) ->
-    {ok, {start_list, to_variable(trim(Rest))}};
+    {ok, {start_list, trim(Rest)}};
 parse_line(<<$<:8, _/bits>>) ->
     {ok, end_list};
 parse_line(Line) ->
@@ -312,3 +311,17 @@ maybe_convert_to_proplist([_|List], List2) ->
     maybe_convert_to_proplist(List, List2);
 maybe_convert_to_proplist([], List2) ->
     List2.
+
+
+maybe_convert_to_map(<<$#, Rest/binary>>, ListVals) ->
+    {to_variable(Rest), to_map(ListVals, #{})};
+maybe_convert_to_map(ListName, ListVals) ->
+    {to_variable(ListName), ListVals}.
+
+
+to_map([{Key, Val}|Rest], Map) ->
+    to_map(Rest, Map#{Key => Val});
+to_map([Key|Rest], Map) ->
+    to_map(Rest, Map#{Key => true});
+to_map([], Map) ->
+    Map.
