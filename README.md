@@ -16,7 +16,7 @@ I want to parse following config file named `test.cfg`.
 # comment
 
 
-var =
+var = value
 
 
 > list
