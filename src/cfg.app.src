@@ -3,7 +3,6 @@
 ,[{description, "Simple and modern config parser"}
  ,{vsn, "17.12.26"}
  ,{applications, [kernel, stdlib]}
- ,{modules, [cfg, cfg_parser]}
  ,{maintainers, ["pouriya.jahanbakhsh@gmail.com"]}
  ,{licenses, ["BSD 3-Clause"]}
- ,{links, [{"GitHub", "https://github.com/Pouriya-Jahanbakhsh/cfg"}]}]}.
+ ,{links, [{"GitHub", "https://github.com/erlang-cfg/cfg"}]}]}.
