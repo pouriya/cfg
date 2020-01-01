@@ -96,8 +96,8 @@ end_per_testcase(_TestCase, _Cfg) ->
     ?assertMatch({ok, [{k, <<"foo">>}], []}, cfg:filter([{k, <<"foo">>}], [{k, binary}])),
     ?assertMatch({ok, [{k, [1,2,3,4,5]}], []}, cfg:filter([{k, [1,2,3,4,5]}], [{k, list}])),
     ?assertMatch({ok, [{k, [{k2, v2}]}], []}, cfg:filter([{k, [{k2, v2}]}], [{k, proplist}])),
-    ?assertMatch({error, {_, #{allowed_type := proplist}}}, cfg:filter([{k, 1}], [{k, proplist}])),
-    ?assertMatch({error, {_, #{allowed_type := atom}}}, cfg:filter([{k, [{k2, v2}]}], [{k, atom}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_type := proplist}}}}, cfg:filter([{k, 1}], [{k, proplist}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_type := atom}}}}, cfg:filter([{k, [{k2, v2}]}], [{k, atom}])),
     
     ?assertMatch({ok, [{k, v}], []}, cfg:filter([{k, v}], [{k, '_', oops}])),
     ?assertMatch({ok, [{k, default}], []}, cfg:filter([], [{k, any, default}])),
@@ -106,8 +106,7 @@ end_per_testcase(_TestCase, _Cfg) ->
     ?assertMatch({ok, [{k, 1}], []}, cfg:filter([{k, 1}], [{k, {one_of, [1,2,3]}}])),
     ?assertMatch({ok, [{k, 2}], []}, cfg:filter([{k, 2}], [{k, {one_of, [1,2,3]}}])),
     ?assertMatch({ok, [{k, 3}], []}, cfg:filter([{k, 3}], [{k, {one_of, [1,2,3]}}])),
-    ?assertMatch({error, {_, #{allowed_values := [1,2,3]}}}, cfg:filter([{k, 4}], [{k, {one_of, [1,2,3]}}])),
-    ?assertMatch({error, {_, _}}, cfg:filter([{k, 4}], [{k, {one_of, [1,2|3]}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_values := [1,2,3]}}}}, cfg:filter([{k, 4}], [{k, {one_of, [1,2,3]}}])),
     
     ?assertMatch({ok, [{k,v}], []}, cfg:filter([{k, {ok, v}}], [{k, {f, fun filter/1}}])),
     ?assertMatch({ok, [{k,v}], []}, cfg:filter([{k, {ok, v}}], [{k, {f, fun filter/2}}])),
@@ -115,17 +114,18 @@ end_per_testcase(_TestCase, _Cfg) ->
     
     ?assertMatch({ok, [{k,ok}], []}, cfg:filter([{k, ok}], [{k, {f, fun filter/1}}])),
     ?assertMatch({ok, [{k,true}], []}, cfg:filter([{k, true}], [{k, {f, fun filter/1}}])),
-    ?assertMatch({error, {_, #{reason := bad_value}}}, cfg:filter([{k, false}], [{k, {f, fun filter/1}}])),
-    ?assertMatch({error, {_, #{previous_error := {reason, #{}}}}}, cfg:filter([{k, {error, {reason, #{}}}}], [{k, {f, fun filter/1}}])),
-    ?assertMatch({error, {_, #{returned_value := unknown_ret}}}, cfg:filter([{k, unknown_ret}], [{k, {f, fun filter/1}}])),
-    ?assertMatch({error, {_, #{exception := oops}}}, cfg:filter([{k, {exception, oops}}], [{k, {f, fun filter/1}}])),
-    ?assertMatch({error, {_, #{arity := 3}}}, cfg:filter([{k, v}], [{k, {f, fun(_, _, _) -> ok end}}])),
-    ?assertMatch({error, {_, #{f := bad_fun}}}, cfg:filter([{k, v}], [{k, {f, bad_fun}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := bad_value}}}}, cfg:filter([{k, false}], [{k, {f, fun filter/1}}])),
+    ?assertMatch({error, {_, #{previous_error := #{previous_error := {reason, #{}}}}}}, cfg:filter([{k, {error, {reason, #{}}}}], [{k, {f, fun filter/1}}])),
+    ?assertMatch({error, {_, #{previous_error := #{returned_value := unknown_ret}}}}, cfg:filter([{k, unknown_ret}], [{k, {f, fun filter/1}}])),
+    ?assertMatch({error, {_, #{previous_error := #{exception := oops}}}}, cfg:filter([{k, {exception, oops}}], [{k, {f, fun filter/1}}])),
     
     ?assertMatch({ok, [{k, <<"v">>}], []}, cfg:filter([{k, v}], [{k, atom_to_binary}])),
-    ?assertMatch({error, {_, #{bif := atom_to_binary}}}, cfg:filter([{k, 1}], [{k, atom_to_binary}])),
+    ?assertMatch({error, {_, #{previous_error := #{bif := atom_to_binary}}}}, cfg:filter([{k, 1}], [{k, atom_to_binary}])),
     ?assertMatch({ok, [{k, "v"}], []}, cfg:filter([{k, v}], [{k, atom_to_list}])),
-    ?assertMatch({error, {_, #{bif := atom_to_list}}}, cfg:filter([{k, 1}], [{k, atom_to_list}])),
+    ?assertMatch({error, {_, #{previous_error := #{bif := atom_to_list}}}}, cfg:filter([{k, 1}], [{k, atom_to_list}])),
+    
+    ?assertMatch({ok, [{k, #{}}], []}, cfg:filter([{k, []}], [{k, proplist_to_map}])),
+    ?assertMatch({error, _}, cfg:filter([{k, 1}], [{k, proplist_to_map}])),
     
     
     ?assertMatch({ok, [{k,v}], []}, cfg:filter([{k, {ok, v}}], [{k, {mf, {?MODULE, filter_1}}}])),
@@ -134,18 +134,19 @@ end_per_testcase(_TestCase, _Cfg) ->
     
     ?assertMatch({ok, [{k,ok}], []}, cfg:filter([{k, ok}], [{k, {mf, {?MODULE, filter}}}])),
     ?assertMatch({ok, [{k,true}], []}, cfg:filter([{k, true}], [{k, {mf, {?MODULE, filter}}}])),
-    ?assertMatch({error, {_, #{reason := bad_value}}}, cfg:filter([{k, false}], [{k, {mf, {?MODULE, filter}}}])),
-    ?assertMatch({error, {_, #{previous_error := {reason, #{}}}}}, cfg:filter([{k, {error, {reason, #{}}}}], [{k, {mf, {?MODULE, filter}}}])),
-    ?assertMatch({error, {_, #{returned_value := unknown_ret}}}, cfg:filter([{k, unknown_ret}], [{k, {mf, {?MODULE, filter}}}])),
-    ?assertMatch({error, {_, #{exception := oops}}}, cfg:filter([{k, {exception, oops}}], [{k, {mf, {?MODULE, filter}}}])),
-    ?assertMatch({error, {_, #{arity := 0}}}, cfg:filter([{k, v}], [{k, {mf, {?MODULE, unknown_function}}}])),
-    ?assertMatch({error, {_, #{mf := bad_mf}}}, cfg:filter([{k, v}], [{k, {mf, bad_mf}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := bad_value}}}}, cfg:filter([{k, false}], [{k, {mf, {?MODULE, filter}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{previous_error := {reason, #{}}}}}}, cfg:filter([{k, {error, {reason, #{}}}}], [{k, {mf, {?MODULE, filter}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{returned_value := unknown_ret}}}}, cfg:filter([{k, unknown_ret}], [{k, {mf, {?MODULE, filter}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{exception := oops}}}}, cfg:filter([{k, {exception, oops}}], [{k, {mf, {?MODULE, filter}}}])),
     
     
     ?assertMatch({ok, [{k, [{k2, v2}]}], []}, cfg:filter([{k, [{k2, v2}]}], [{k, {proplist, [{k2, atom}]}}])),
     ?assertMatch({ok, [{k, [{k2, v2}]}], []}, cfg:filter([{k, [{k2, v2}]}], [{k, {proplist, [{k2, atom}]}, default}])),
     ?assertMatch({ok, [{k, [{k2, v2}, {k3, default}]}], [{k, [{k4, v4}]}]}, cfg:filter([{k, [{k2, v2}, {k4, v4}]}], [{k, {proplist, [{k2, atom}, {k3, any, default}]}}])),
     ?assertMatch({ok, [{k, [{k2, v2}, {k3, default}]}], [{k, [{k4, v4}]}]}, cfg:filter([{k, [{k2, v2}, {k4, v4}]}], [{k, {proplist, [{k2, atom}, {k3, any, default}]}, default}])),
+    
+    ?assertMatch({ok, [{k, [{k2, [{k3, v3}]}]}], []}, cfg:filter([{k, [{k2, [{k3, v3}]}]}], [{k, {proplist, [{k2, {proplist, [{k3, atom}]}}]}, default}])),
+    ?assertMatch({ok, [{k, [{k2, [{k3, v3}]}]}], []}, cfg:filter([{k, [{k2, [{k3, v3}]}]}], [{k, {proplist, [{k2, {proplist, [{k3, atom}]}}]}, default}])),
     
     ?assertMatch(
         {ok, [{k, [10, 20, 30, 40]}], []},
@@ -171,7 +172,7 @@ end_per_testcase(_TestCase, _Cfg) ->
         )
     ),
     ?assertMatch(
-        {error, {_, #{reason := bad_value}}},
+        {error, {_, #{previous_error := #{reason := bad_value}}}},
         cfg:filter(
             [{k, [10, 20, 35, 40]}],
             [
@@ -200,55 +201,48 @@ end_per_testcase(_TestCase, _Cfg) ->
             [{k, {list, {proplist, [{k, any}]}}}]
         )
     ),
-    ?assertMatch(
-        {error, {_, #{list := 2}}},
-        cfg:filter([{k, 2}], [{k, {list, any}}])
-    ),
     
     
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, 10}}])),
-    ?assertMatch({error, {_, #{allowed_size := 11}}}, cfg:filter([{k, 10}], [{k, {size, 11}}])),
-    ?assertMatch({error, {_, #{allowed_types := _}}}, cfg:filter([{k, atom}], [{k, {size, 11}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_size := 11}}}}, cfg:filter([{k, 10}], [{k, {size, 11}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := unknown_size}}}}, cfg:filter([{k, atom}], [{k, {size, 11}}])),
     
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {min, 9}}}])),
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {min, 10}}}])),
-    ?assertMatch({error, {_, #{allowed_min_size := 11}}}, cfg:filter([{k, 10}], [{k, {size, {min, 11}}}])),
-    ?assertMatch({error, {_, #{allowed_types := _}}}, cfg:filter([{k, atom}], [{k, {size, {min, 10}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_min_size := 11}}}}, cfg:filter([{k, 10}], [{k, {size, {min, 11}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := unknown_size}}}}, cfg:filter([{k, atom}], [{k, {size, {min, 10}}}])),
     
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {max, 11}}}])),
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {max, 10}}}])),
-    ?assertMatch({error, {_, #{allowed_max_size := 9}}}, cfg:filter([{k, 10}], [{k, {size, {max, 9}}}])),
-    ?assertMatch({error, {_, #{allowed_types := _}}}, cfg:filter([{k, atom}], [{k, {size, {max, 10}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_max_size := 9}}}}, cfg:filter([{k, 10}], [{k, {size, {max, 9}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := unknown_size}}}}, cfg:filter([{k, atom}], [{k, {size, {max, 10}}}])),
     
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {9, 11}}}])),
     ?assertMatch({ok, [{k, 9}], []}, cfg:filter([{k, 9}], [{k, {size, {9, 11}}}])),
     ?assertMatch({ok, [{k, 11}], []}, cfg:filter([{k, 11}], [{k, {size, {9, 11}}}])),
     ?assertMatch({ok, [{k, 10}], []}, cfg:filter([{k, 10}], [{k, {size, {min, 10}}}])),
-    ?assertMatch({error, {_, #{allowed_min_size := 9}}}, cfg:filter([{k, 8}], [{k, {size, {9, 11}}}])),
-    ?assertMatch({error, {_, #{allowed_max_size := 11}}}, cfg:filter([{k, 12}], [{k, {size, {9, 11}}}])),
-    ?assertMatch({error, {_, #{allowed_types := _}}}, cfg:filter([{k, atom}], [{k, {size, {9, 11}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_min_size := 9}}}}, cfg:filter([{k, 8}], [{k, {size, {9, 11}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{allowed_max_size := 11}}}}, cfg:filter([{k, 12}], [{k, {size, {9, 11}}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := unknown_size}}}}, cfg:filter([{k, atom}], [{k, {size, {9, 11}}}])),
     
-    ?assertMatch({error, {_, #{size_value := bad_size}}}, cfg:filter([{k, atom}], [{k, {size, bad_size}}])),
     
     ?assertMatch({ok, [{k, 3.14}], []}, cfg:filter([{k, 3.14}], [{k, {size, {min, 1}}}])),
     ?assertMatch({ok, [{k, 3.14}], []}, cfg:filter([{k, 3.14}], [{k, {size, {max, 5.0}}}])),
     
     ?assertMatch({ok, [{k, [1, 2, 3]}], []}, cfg:filter([{k, [1, 2, 3]}], [{k, {size, 3}}])),
-    ?assertMatch({error, {_, #{allowed_types := _}}}, cfg:filter([{k, [1, 2 | 3]}], [{k, {size, 3}}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := unknown_size}}}}, cfg:filter([{k, [1, 2 | 3]}], [{k, {size, 3}}])),
     ?assertMatch({ok, [{k, <<"ABC">>}], []}, cfg:filter([{k, <<"ABC">>}], [{k, {size, 3}}])),
     
     ?assertMatch({ok, [{k, <<"ABC">>}], []}, cfg:filter([{k, <<"ABC">>}], [{k, {'&', [binary, {size, 3}]}}])),
-    ?assertMatch({error, {_, #{allowed_size := 4}}}, cfg:filter([{k, <<"ABC">>}], [{k, {'and', [binary, {size, 4}]}}])),
-    ?assertMatch({error, {_, _}}, cfg:filter([{k, <<"ABC">>}], [{k, {'&', bad_and}}])),
+    ?assertMatch({error, {_, #{previous_error := #{previous_error := #{allowed_size := 4}}}}}, cfg:filter([{k, <<"ABC">>}], [{k, {'and', [binary, {size, 4}]}}])),
     
     ?assertMatch({ok, [{k, [1, 2.0, '3']}], []}, cfg:filter([{k, [1, 2.0, '3']}], [{k, {list, {'|', [integer, float, atom]}}}])),
     ?assertMatch({error, {_, _}}, cfg:filter([{k, [1, 2.0, '3', <<"4">>]}], [{k, {list, {'or', [integer, float, atom]}}}])),
-    ?assertMatch({error, {_, _}}, cfg:filter([{k, <<"ABC">>}], [{k, {'|', bad_or}}])),
     
-    ?assertMatch({error, {_, #{key_filter := unknown_key_filter}}}, cfg:filter([{k, <<"ABC">>}], [{k, unknown_key_filter}])),
-    ?assertMatch({error, {_, #{filter := unknown_filter}}}, cfg:filter([{k, <<"ABC">>}], [unknown_filter])),
-    ?assertMatch({error, {_, #{filters := unknown_filters}}}, cfg:filter([{k, <<"ABC">>}], unknown_filters)),
-    
+    ?assertMatch({ok, [{value, "foo"}], []}, cfg:filter([{k, value}, {value, foo}], [{{k, atom}, atom_to_list}])),
+    ?assertMatch({error, {_, #{previous_error := #{bif := _}}}}, cfg:filter([{k, value}, {value, "foo"}], [{{k, atom}, atom_to_list}])),
+    ?assertMatch({error, {_, #{reason := bad_key}}}, cfg:filter([{k, value}, {value, "foo"}], [{{k, atom_to_binary}, atom_to_list}])),
+    ?assertMatch({error, {_, #{previous_error := #{reason := not_found}}}}, cfg:filter([{value, "foo"}], [{{k, atom_to_binary}, atom_to_list}])),
     
     ok.
 
@@ -256,6 +250,12 @@ end_per_testcase(_TestCase, _Cfg) ->
 
 '3'(Cfg) ->
     _ = Cfg,
+    ?assertMatch(
+        ok,
+        cfg:check_filters(
+            [{k, atom, default}, {k, atom}, {k, {list, [atom]}}, {k, {'and', [atom, binary]}}, {k, {'or', [atom, binary]}}, {k, {proplist, [{k3, list}]}}, {k, {mf, {m, f}}}, {k, {f, fun erlang:is_number/1}}, {k, {size, 1}}, {k, {size, {min, 1}}}, {k, {size, {max, 1}}}, {k, {size, {1, 2}}}, {k, {one_of, [option]}}, {{k, {one_of, [option]}}, {one_of, [option]}}]
+        )
+    ),
     ok.
 
 

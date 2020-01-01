@@ -3,11 +3,11 @@
 -include("cfg_stacktrace.hrl").
 
 %% API
--export([do/2]).
+-export([do/2, check/1]).
 
 
 do(Filters, Cfg) ->
-    case filter(Filters, Cfg, [], []) of
+    case filter(Filters, Cfg, [], [], 1) of
         {_, ErrParams} ->
             {error, {filter_config, ErrParams#{filters => Filters}}};
         Ok ->
@@ -15,79 +15,110 @@ do(Filters, Cfg) ->
     end.
 
 
-filter([{Key, Filter, Default} | Filters], Cfg, Unknown, Ret) ->
+check(Filters) ->
+    check_filters(Filters, 1).
+
+
+filter(
+    [{Key, KeyFilter, Default}=Filter | Filters],
+    Cfg,
+    Unknown,
+    Ret,
+    Index
+) ->
+    case filter_key(Key, KeyFilter, Cfg) of
+        {ok, Key2, Value, Unknown2, Cfg2} ->
+            filter(
+                Filters,
+                Cfg2,
+                maybe_add_unknown_config(Key2, Unknown2, Unknown),
+                [{Key2, Value} | Ret],
+                Index + 1
+            );
+        {_, #{key := Key, reason := not_found}} ->
+            filter(Filters, Cfg, Unknown, [{Key, Default} | Ret], Index + 1);
+        {Reason, ErrParams} ->
+            {Reason, ErrParams#{filter => Filter, filter_index => Index}}
+    end;
+
+filter([{Key, KeyFilter}=Filter | Filters], Cfg, Unknown, Ret, Index) ->
+    case filter_key(Key, KeyFilter, Cfg) of
+        {ok, Key2, Value, Unknown2, Cfg2} ->
+            filter(
+                Filters,
+                Cfg2,
+                maybe_add_unknown_config(Key2, Unknown2, Unknown),
+                [{Key2, Value} | Ret],
+                Index + 1
+            );
+        {_, ErrParams} ->
+            {error, ErrParams#{filter => Filter}}
+    end;
+
+filter([], Cfg, Unknown, Ret, _) ->
+    {ok, lists:reverse(Ret), Unknown ++ Cfg}.
+
+
+maybe_add_unknown_config(_, [], X) ->
+    X;
+
+maybe_add_unknown_config(Key, Value, X) ->
+    [{Key, Value} | X].
+
+
+
+filter_key(Key, Filter, Cfg) when erlang:is_atom(Key) ->
     case lists:keytake(Key, 1, Cfg) of
-        {_, {_, Value}, Cfg2} ->
+        {_, {_, Value}, Cfg3} ->
             case filter_value(Filter, Key, Value) of
                 {ok, Value2} ->
-                    filter(Filters, Cfg2, Unknown, [{Key, Value2} | Ret]);
-                {ok, Value2, Unknown2} ->
-                    filter(
-                        Filters,
-                        Cfg2,
-                        if
-                            Unknown2 == [] ->
-                                Unknown;
-                            true ->
-                                [{Key, Unknown2} | Unknown]
-                        end,
-                        [{Key, Value2} | Ret]
-                    );
-                {_, ErrParams} ->
+                    {ok, Key, Value2, [], Cfg3};
+                {ok, Value2, Unknown} ->
+                    {ok, Key, Value2, Unknown, Cfg3};
+                {error, ErrParams} ->
                     {
                         error,
-                        ErrParams#{
+                        #{
+                            value => Value,
                             key => Key,
                             key_filter => Filter,
-                            default_value => Default,
-                            value => Value
+                            previous_error => ErrParams
                         }
                     }
             end;
         _ ->
-            filter(Filters, Cfg, Unknown, [{Key, Default} | Ret])
+            {error, #{key => Key, key_filter => Filter, reason => not_found}}
     end;
 
-filter([{Key, Filter} | Filters], Cfg, Unknown, Ret) ->
-    case lists:keytake(Key, 1, Cfg) of
-        {_, {_, Value}, Cfg2} ->
-            case filter_value(Filter, Key, Value) of
-                {ok, Value2} ->
-                    filter(Filters, Cfg2, Unknown, [{Key, Value2} | Ret]);
-                {ok, Value2, Unknown2} ->
-                    filter(
-                        Filters,
-                        Cfg2,
-                        if
-                            Unknown2 == [] ->
-                                Unknown;
-                            true ->
-                                [{Key, Unknown2} | Unknown]
-                        end,
-                        [{Key, Value2} | Ret]
-                    );
+filter_key(FilterAsKey, Filter, Cfg) ->
+    case filter([FilterAsKey], Cfg, [], [], 1) of
+        {ok, [{_, Value}], Cfg2} when erlang:is_atom(Value) ->
+            case filter_key(Value, Filter, Cfg2) of
                 {_, ErrParams} ->
-                    {
-                        error,
-                        ErrParams#{
-                            key => Key,
-                            key_filter => Filter,
-                            value => Value
-                        }
-                    }
+                    {error, ErrParams#{filtered_key => Value}};
+                Ok ->
+                    Ok
             end;
-        _ ->
-            {error, #{reason => not_found, key => Key, key_filter => Filter}}
-    end;
-
-filter([], Cfg, Unknown, Ret) ->
-    {ok, lists:reverse(Ret), Cfg ++ Unknown};
-
-filter([Filter | _], _, _, _) ->
-    {error, #{filter => Filter}};
-
-filter(Filters, _, _, _) ->
-    {error, #{filters => Filters}}.
+        {ok, [{_, Other}], _} ->
+            {
+                error,
+                #{
+                    key => FilterAsKey,
+                    key_filter => Filter,
+                    reason => bad_key,
+                    filtered_key => Other
+                }
+            };
+        {_, ErrParams} ->
+            {
+                error,
+                #{
+                    key => FilterAsKey,
+                    key_filter => Filter,
+                    previous_error => ErrParams
+                }
+            }
+    end.
 
 
 filter_value(Any, _, Value) when Any == any orelse Any == '_' ->
@@ -124,7 +155,7 @@ filter_value(BIF, _, Value) when BIF == atom_to_list      orelse
                                  BIF == list_to_float     orelse
                                  BIF == binary_to_list    orelse
                                  BIF == binary_to_integer orelse
-                                 BIF == binary_to_float ->
+                                 BIF == binary_to_float       ->
     try
         {ok, erlang:BIF(Value)}
     catch
@@ -141,14 +172,30 @@ filter_value(BIF, _, Value) when BIF == atom_to_binary orelse
             {error, #{bif => BIF}}
     end;
 
-filter_value({proplist, Filters}, _, Value) ->
-    filter(Filters, Value, [], []);
+
+filter_value(proplist_to_map, _, Value) ->
+    case cfg_utils:is_proplist(Value) of
+        true ->
+            {ok, maps:from_list(Value)};
+        _ ->
+            {error, #{bif => proplist_to_map}}
+    end;
+
+filter_value({proplist, Filters}, Key, Value) ->
+    case filter(Filters, Value, [], [], 1) of
+        {Error, #{parent_keys := ParentKeys}=ErrParams} ->
+            {Error, ErrParams#{parent_keys => [Key | ParentKeys]}};
+        {Error, ErrParams} ->
+            {Error, ErrParams#{parent_keys => [Key]}};
+        Ok ->
+            Ok
+    end;
 
 filter_value({list, Filter}, Key, Value) ->
     filter_list(Value, Filter, Key, [], []);
 
 filter_value({And, List}, Key, Value) when And == '&' orelse And == 'and' ->
-    filter_and(List, Key, Value, []);
+    filter_and(List, Key, Value, [], Value);
 
 filter_value({Or, List}, Key, Value) when Or == '|' orelse Or == 'or' ->
     filter_or(List, Key, Value);
@@ -163,10 +210,7 @@ filter_value({mf, MF}, Keys, Value) ->
     filter_mf(MF, Keys, Value);
 
 filter_value({f, F}, Keys, Value) ->
-    filter_f(F, Keys, Value);
-
-filter_value(_, _, _) ->
-    {error, #{reason => unknown_key_filter}}.
+    filter_f(F, Keys, Value).
 
 
 filter_mf({Mod, Func}, Keys, Value) when erlang:is_atom(Mod) andalso
@@ -188,10 +232,7 @@ filter_mf({Mod, Func}, Keys, Value) when erlang:is_atom(Mod) andalso
             {error, ErrParams#{module => Mod, function => Func}};
         Ok ->
             Ok
-    end;
-
-filter_mf(MF, _, _) ->
-    {error, #{mf => MF, allowed_type => {atom, atom}}}.
+    end.
 
 
 filter_f(Func, Keys, Value) when erlang:is_function(Func) ->
@@ -201,13 +242,10 @@ filter_f(Func, Keys, Value) when erlang:is_function(Func) ->
             {error, ErrParams#{function => Func}};
         Ok ->
             Ok
-    end;
-
-filter_f(MF, _, _) ->
-    {error, #{f => MF, allowed_type => function}}.
+    end.
 
 
-run_filter(Arity, Filter, Key, Value) when Arity == 1 orelse Arity == 2 ->
+run_filter(Arity, Filter, Key, Value) ->
     try
         case Filter of
             {Mod, Func} when Arity == 1 ->
@@ -240,21 +278,15 @@ run_filter(Arity, Filter, Key, Value) when Arity == 1 orelse Arity == 2 ->
                     stacktrace => ?get_stacktrace(Stacktrace)
                 }
             }
-    end;
-
-run_filter(Arity, _, _, _) ->
-    {error, #{arity => Arity, allowed_arity => [1, 2]}}.
+    end.
 
 
 filter_one_of(List, Value) ->
-    try lists:member(Value, List) of
+    case lists:member(Value, List) of
         true ->
             {ok, Value};
         _ ->
             {error, #{allowed_values => List}}
-    catch
-        _:_ ->
-            {error, #{one_of => List, allowed_type => list}}
     end.
 
 
@@ -268,7 +300,7 @@ filter_size(Size, Value) when erlang:is_number(Size) ->
             Err
     end;
 
-filter_size({min, Size}, Value) when erlang:is_number(Size) ->
+filter_size({min, Size}, Value) ->
     case get_size(Value) of
         {ok, Size2} when Size2 >= Size ->
             {ok, Value};
@@ -278,7 +310,7 @@ filter_size({min, Size}, Value) when erlang:is_number(Size) ->
             Err
     end;
 
-filter_size({max, Size}, Value) when erlang:is_number(Size) ->
+filter_size({max, Size}, Value) ->
     case get_size(Value) of
         {ok, Size2} when Size2 =< Size ->
             {ok, Value};
@@ -288,9 +320,7 @@ filter_size({max, Size}, Value) when erlang:is_number(Size) ->
             Err
     end;
 
-filter_size({MinSize, MaxSize}, Value) when erlang:is_number(MinSize) andalso
-                                            erlang:is_number(MaxSize) andalso
-                                            MaxSize > MinSize               ->
+filter_size({MinSize, MaxSize}, Value) ->
     case get_size(Value) of
         {ok, Size2} when Size2 =< MaxSize andalso Size2 >= MinSize ->
             {ok, Value};
@@ -300,21 +330,7 @@ filter_size({MinSize, MaxSize}, Value) when erlang:is_number(MinSize) andalso
             {error, #{allowed_max_size => MaxSize, size => Size2}};
         Err ->
             Err
-    end;
-
-filter_size(Other, _) ->
-    {
-        error,
-        #{
-            size_value => Other,
-            allowed_types => [
-                number,
-                {min, number},
-                {max, number},
-                {number, number}
-            ]
-        }
-    }.
+    end.
 
 
 get_size(Value) ->
@@ -324,37 +340,41 @@ get_size(Value) ->
                 {ok, erlang:length(Value)}
             catch
                 _:_ ->
-                    {error, #{allowed_types => [list, proplist, binary, number]}}
+                    {error, #{reason => unknown_size}}
             end;
         erlang:is_binary(Value) ->
             {ok, erlang:byte_size(Value)};
         erlang:is_number(Value) ->
             {ok, Value};
         true ->
-            {error, #{allowed_types => [list, proplist, binary, number]}}
+            {error, #{reason => unknown_size}}
     end.
 
 
-filter_and([Filter | Filters], Key, Value, Unknown) ->
+filter_and([Filter | Filters], Key, Value, Unknown, OrigValue) ->
     case filter_value(Filter, Key, Value) of
         {ok, Value2} ->
-            filter_and(Filters, Key, Value2, Unknown);
+            filter_and(Filters, Key, Value2, Unknown, OrigValue);
         {ok, Value2, Unknown2} ->
-            filter_and(Filters, Key, Value2, Unknown ++ Unknown2);
-        Err ->
-            Err
+            filter_and(Filters, Key, Value2, Unknown ++ Unknown2, OrigValue);
+        {error, ErrParams} ->
+            {
+                error,
+                #{
+                    last_value => Value,
+                    original_value => OrigValue,
+                    previous_error => ErrParams
+                }
+            }
     end;
 
-filter_and([], _, Value, Unknown) ->
-    {ok, Value, Unknown};
-
-filter_and(_, _, _, _) ->
-    {error, #{}}.
+filter_and([], _, Value, Unknown, _) ->
+    {ok, Value, Unknown}.
 
 
 filter_or([Filter | Filters], Key, Value) ->
     case filter_value(Filter, Key, Value) of
-        Ok when Ok == ok orelse erlang:element(1, Ok) == ok ->
+        Ok when erlang:element(1, Ok) == ok ->
             Ok;
         Err ->
             if
@@ -363,10 +383,7 @@ filter_or([Filter | Filters], Key, Value) ->
                 true ->
                     filter_or(Filters, Key, Value)
             end
-    end;
-
-filter_or(_, _, _) ->
-    {error, #{}}.
+    end.
 
 
 filter_list([Element | List], Filter, Key, Unknown, Ret) ->
@@ -386,7 +403,200 @@ filter_list([Element | List], Filter, Key, Unknown, Ret) ->
     end;
 
 filter_list([], _, _, Unknown, Ret) ->
-    {ok, lists:reverse(Ret), Unknown};
+    {ok, lists:reverse(Ret), Unknown}.
 
-filter_list(Other, _, _, _, _) ->
-    {error, #{list => Other}}.
+
+check_filters([Filter | Filters], Index) ->
+    case check_filter(Filter) of
+        ok ->
+            check_filters(Filters, Index + 1);
+        {_, ErrParams} ->
+            {error, ErrParams#{index => Index}}
+    end;
+
+check_filters([], _) ->
+    ok;
+
+check_filters(_, 1) ->
+    {error, #{}};
+
+check_filters(Other, Index) ->
+    {error, #{filter => Other, index => Index}}.
+
+
+check_filter({Key, KeyFilter, Default}) ->
+    case check_filter({Key, KeyFilter}) of
+        {_, ErrParams} ->
+            {
+                error,
+                ErrParams#{
+                    key => Key,
+                    key_filter => KeyFilter,
+                    default_value => Default
+                }
+            };
+        Ok ->
+            Ok
+    end;
+
+check_filter({Key, KeyFilter}) ->
+    case check_key(Key) of
+        ok ->
+            case check_key_filter(KeyFilter) of
+                ok ->
+                    ok;
+                {_, ErrParams} ->
+                    {error, ErrParams#{key => Key, key_filter => KeyFilter}}
+            end;
+        {_, ErrParams} ->
+            {error, ErrParams#{key => Key, key_filter => KeyFilter}}
+    end;
+
+check_filter(Filter) ->
+    {error, #{filter => Filter}}.
+
+
+check_key(Key) when erlang:is_atom(Key) ->
+    ok;
+
+check_key(KeyFilter) ->
+    case check_filter(KeyFilter) of
+        ok ->
+            ok;
+        {_, ErrParams} ->
+            {error, ErrParams#{key => KeyFilter}}
+    end.
+
+
+check_key_filter(X) when erlang:is_atom(X) ->
+    case lists:member(
+        X,
+        [
+            any,
+            '_',
+            atom,
+            binary,
+            number,
+            integer,
+            float,
+            list,
+            boolean,
+            proplist,
+
+            atom_to_list,
+            list_to_atom,
+            list_to_binary,
+            list_to_integer,
+            list_to_float,
+            binary_to_list,
+            binary_to_integer,
+            binary_to_float,
+            atom_to_binary,
+            binary_to_atom,
+            proplist_to_map
+        ]
+    ) of
+        true ->
+            ok;
+        _ ->
+            {error, #{reason => unknown_filter}}
+    end;
+
+check_key_filter({X, Filters}) when X == '&' orelse X == 'and' ->
+    case Filters of
+        [Filter | Filters2] ->
+            case check_key_filter(Filter) of
+                ok ->
+                    check_key_filter({X, Filters2});
+                {_, ErrParams} ->
+                    {error, #{reason => bad_and, previous_error => ErrParams}}
+            end;
+        [] ->
+            ok;
+        _ ->
+            {error, #{reason => bad_and}}
+    end;
+
+check_key_filter({X, Filters}) when X == '|' orelse X == 'or' ->
+    case Filters of
+        [Filter | Filters2] ->
+            case check_key_filter(Filter) of
+                ok ->
+                    check_key_filter({X, Filters2});
+                {_, ErrParams} ->
+                    {error, #{reason => bad_or, previous_error => ErrParams}}
+            end;
+        [] ->
+            ok;
+        _ ->
+            {error, #{reason => bad_or}}
+    end;
+
+check_key_filter({mf, MF}) ->
+    case MF of
+        {M, F} when erlang:is_atom(M) andalso erlang:is_atom(F) ->
+            ok;
+        _ ->
+            {error, #{reason => bad_mf}}
+    end;
+
+check_key_filter({f, F}) ->
+    if
+        erlang:is_function(F, 1) orelse erlang:is_function(F, 2) ->
+            ok;
+        true ->
+            {error, #{reason => bad_f}}
+    end;
+
+check_key_filter({proplist, Filters}) ->
+    case check_filters(Filters, 1) of
+        ok ->
+            ok;
+        {_, ErrParams} ->
+            {error, #{reason => bad_proplist, previous_error => ErrParams}}
+    end;
+
+check_key_filter({list, Filters}) ->
+    case Filters of
+        [Filter | Filters2] ->
+            case check_key_filter(Filter) of
+                ok ->
+                    check_key_filter({list, Filters2});
+                {_, ErrParams} ->
+                    {error, #{reason => bad_list, previous_error => ErrParams}}
+            end;
+        [] ->
+            ok;
+        _ ->
+            {error, #{reason => bad_list}}
+    end;
+
+check_key_filter({size, Size}) ->
+    case Size of
+        _ when erlang:is_number(Size) ->
+            ok;
+        
+        {X, Y} when (X == min orelse X == max) andalso erlang:is_number(Y) ->
+            ok;
+        
+        {X, Y} when erlang:is_number(X) andalso
+                    erlang:is_number(Y) andalso
+                    X =< Y                   ->
+            ok;
+        _ ->
+            {error, #{reason => bad_size}}
+    end;
+
+check_key_filter({one_of, List}) ->
+    try erlang:length(List) of
+        0 ->
+            {error, #{reason => bad_one_of}};
+        _ ->
+            ok
+    catch
+        _:_ ->
+            {error, #{reason => bad_one_of}}
+    end;
+
+check_key_filter(_) ->
+    {error, #{reason => unknown_filter}}.

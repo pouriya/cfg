@@ -8,10 +8,11 @@
 %% -----------------------------------------------------------------------------
 %% Exports:
 
--export([load/3, read/1, filter/2, keep/2, get/2, get/3, set/3, delete/2, delete/1]).
+-export([load/3, read/1, filter/2, keep/2, get/2, get/3, set/3, delete/2, delete/1, check_filters/1]).
 
 
 load(Readers, Filters, Keeper) ->
+    
     case read(Readers) of
         {ok, Cfg} ->
             case filter(Cfg, Filters) of
@@ -47,8 +48,12 @@ filter(Cfg, Filters) ->
     cfg_filter:do(Filters, Cfg).
 
 
+check_filters(Filters) ->
+    cfg_filter:check(Filters).
+
+
 keep(Cfg, Keeper) ->
-    cfg_keeper:do(Keeper, Cfg).
+    cfg_keeper:keep(Keeper, Cfg).
 
 
 get(Keeper, Keys) ->

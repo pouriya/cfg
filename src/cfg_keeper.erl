@@ -2,10 +2,59 @@
 -author("pouriya").
 -include("cfg_stacktrace.hrl").
 %% API
--export([do/2, get/2, get/3, set/3, delete/2, delete/1]).
+-export([init/1, keep/2, get/2, get/3, set/3, delete/2, delete/1]).
 
 
-do({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
+init({Keeper, Opts}) ->
+    Mod = module(Keeper),
+    try Mod:init_config(Opts) of
+        ok ->
+            ok;
+        {error, {Reason, ErrParams}=Info} when erlang:is_atom(Reason) andalso
+                                               erlang:is_map(ErrParams)    ->
+            {
+                error,
+                {
+                    keep_config,
+                    #{
+                        keeper => Keeper,
+                        keeper_options => Opts,
+                        previous_error => Info
+                    }
+                }
+            };
+        Other ->
+            {
+                error,
+                {
+                    keep_config,
+                    #{
+                        keeper => Keeper,
+                        keeper_options => Opts,
+                        returned_value => Other,
+                        module => Mod,
+                        function => init_config
+                    }
+                }
+            }
+    catch
+        ?define_stacktrace(_, Reason, Stacktrace) ->
+            {
+                error,
+                {
+                    keep_config,
+                    #{
+                        keeper => Keeper,
+                        keeper_options => Opts,
+                        exception => Reason,
+                        stacktrace => ?get_stacktrace(Stacktrace)
+                    }
+                }
+            }
+    end.
+
+
+keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
     try Mod:keep_config(Opts, Cfg) of
         ok ->
