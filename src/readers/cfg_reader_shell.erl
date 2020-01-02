@@ -1,17 +1,19 @@
-%%%-------------------------------------------------------------------
-%%% @author pouriya
-%%% @copyright (C) 2019, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 29. Dec 2019 1:23 PM
-%%%-------------------------------------------------------------------
--module(cfg_reader_shell).
--author("pouriya").
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
 
-%% API
+%% -----------------------------------------------------------------------------
+-module(cfg_reader_shell).
+-behaviour(cfg_reader).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
+
+%% 'config_reader' callback:
 -export([read_config/1]).
 
+%% -----------------------------------------------------------------------------
+%% 'config_reader' callback:
 
 read_config(Prefix) when erlang:is_list(Prefix) ->
     FilterFun =
@@ -42,6 +44,8 @@ read_config(Prefix) when erlang:is_list(Prefix) ->
         end,
     transform_shell_vars(lists:foldl(FilterFun, [], Vars), []).
 
+%% -----------------------------------------------------------------------------
+%% Internals:
 
 is_started_with([X|RestX], [Y|RestY]) when X == Y ->
     is_started_with(RestX, RestY);

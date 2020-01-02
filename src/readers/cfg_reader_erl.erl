@@ -1,17 +1,19 @@
-%%%-------------------------------------------------------------------
-%%% @author pouriya
-%%% @copyright (C) 2019, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 29. Dec 2019 1:38 PM
-%%%-------------------------------------------------------------------
--module(cfg_reader_erl).
--author("pouriya").
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
 
-%% API
+%% -----------------------------------------------------------------------------
+-module(cfg_reader_erl).
+-behaviour(cfg_reader).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
+
+%% 'config_reader' callback:
 -export([read_config/1]).
 
+%% -----------------------------------------------------------------------------
+%% 'config_reader' callback:
 
 read_config(Filename) ->
     case file:consult(Filename) of

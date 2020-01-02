@@ -1,14 +1,44 @@
--module(cfg_reader).
--author("pouriya").
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
 
--include("cfg_stacktrace.hrl").
+%% -----------------------------------------------------------------------------
+-module(cfg_reader).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
+
 %% API
 -export([do/1]).
 
+%% -----------------------------------------------------------------------------
+%% Behavior callback:
+
+-callback
+read_config(Opts :: any()) -> Result when
+    Result :: {ok, Config} | {error, {Reason :: atom(), ErrorParams :: map()}},
+    Config :: [] | [ConfigParameter],
+    ConfigParameter :: atom()
+                     | binary()
+                     | number()
+                     | ConfigList
+                     | ConfigProplist,
+    ConfigList :: [] | [ConfigParameter],
+    ConfigProplist :: [] | [{atom(), ConfigParameter}].
+
+%% -----------------------------------------------------------------------------
+%% Records & Macros & Includes:
+
+-include("cfg_stacktrace.hrl").
+
+%% -----------------------------------------------------------------------------
+%% API:
 
 do(Readers) ->
     read(Readers, []).
 
+%% -----------------------------------------------------------------------------
+%% Internals:
 
 read([{Reader, Param} | Readers], Cfg) when erlang:is_atom(Reader) ->
     case do_read(Reader, Param) of
