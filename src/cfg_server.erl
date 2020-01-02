@@ -1,5 +1,13 @@
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
+
+%% -----------------------------------------------------------------------------
 -module(cfg_server).
--author("pouriya").
+-behaviour(gen_server).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
 
 %% API
 -export([
@@ -17,10 +25,11 @@
     set_filters/2,
     set_keeper/2,
     
-    info/1
+    info/1,
+    stop/1
 ]).
 
-
+%% 'gen_server' callbacks:
 -export([
     init/1,
     handle_call/3,
@@ -29,13 +38,16 @@
     terminate/2
 ]).
 
+%% -----------------------------------------------------------------------------
+%% Records & Macros & Includes:
+
 -define(S, state).
 -record(?S, {readers, filters, keeper, config, subscribers, options}).
 
 -define(O, options).
 -record(?O, {
     error_unknown_config,
-    notifier,
+    notify_method,
     notify_tag,
     change_priority,
     delete_on_terminate
@@ -49,6 +61,9 @@
 -define(SET_FILTERS_TAG, set_filters).
 -define(SET_KEEPER_TAG, set_keeper).
 -define(INFO_TAG, info).
+
+%% -----------------------------------------------------------------------------
+%% API:
 
 start_link(RegisterName, Readers, Filters, Keeper, Opts) ->
     gen_server:start_link(
@@ -94,16 +109,22 @@ set_readers(Proc, Readers) ->
 
 
 set_filters(Proc, Filters) ->
-    gen_server:call(Proc, {?SET_READERS_TAG, Filters}).
+    gen_server:call(Proc, {?SET_FILTERS_TAG, Filters}).
 
 
 set_keeper(Proc, Keeper) ->
-    gen_server:call(Proc, {?SET_READERS_TAG, Keeper}).
+    gen_server:call(Proc, {?SET_KEEPER_TAG, Keeper}).
 
 
 info(Proc) ->
     gen_server:call(Proc, ?INFO_TAG).
 
+
+stop(Server) ->
+    gen_server:stop(Server).
+
+%% -----------------------------------------------------------------------------
+%% 'gen_server' callbacks:
 
 init({Readers, Filters, Keeper, Opts}) ->
     S = #?S{
@@ -115,7 +136,7 @@ init({Readers, Filters, Keeper, Opts}) ->
             Opts,
             #?O{
                 error_unknown_config = false,
-                notifier = message,
+                notify_method = message,
                 notify_tag = config,
                 change_priority = false,
                 delete_on_terminate = true
@@ -146,7 +167,6 @@ handle_call({?UNSUBSCRIBE_TAG, Subscriber, Keys}, _, S) ->
 
 handle_call({?CHANGE_OPTIONS_TAG, Opts}, _, S) ->
     {reply, ok, S#?S{options = options(Opts, S#?S.options)}};
-
 
 handle_call({?SET_READERS_TAG, Readers}, _, S) ->
     {reply, ok, S#?S{readers = Readers}};
@@ -208,6 +228,8 @@ terminate(_, S) ->
         end,
     ok.
 
+%% -----------------------------------------------------------------------------
+%% Internals:
 
 options(#{error_unknown_config := Value}=Opts, Rec) ->
     options(
@@ -261,7 +283,7 @@ options(#{notify := Value}=Opts, Rec) ->
     options(
         maps:remove(notify, Opts),
         Rec#?O{
-            notifier =
+            notify_method =
                 if
                     Value == call orelse Value == cast ->
                         Value;
@@ -282,7 +304,6 @@ read_and_filter(
         options = Opts
     }=S
 ) ->
-    io:format("~p~n", [Readers]),
     case cfg:read(Readers) of
         {ok, Cfg} ->
             case cfg:filter(Cfg, Filters) of
@@ -302,9 +323,14 @@ read_and_filter(
 
 
 keep(#?S{keeper = Keeper, config = Cfg}=S) ->
-    case cfg:keep(Cfg, Keeper) of
+    case cfg:init(Keeper) of
         ok ->
-            {ok, S};
+            case cfg:load(Cfg, Keeper) of
+                ok ->
+                    {ok, S};
+                Err ->
+                    Err
+            end;
         Err ->
             Err
     end.
@@ -334,7 +360,7 @@ do_reload(#?S{config = Cfg, options = Opts}=S) ->
                     maps:to_list(S#?S.subscribers),
                     Cfg,
                     Cfg2,
-                    (S#?S.options)#?O.notifier,
+                    (S#?S.options)#?O.notify_method,
                     (S#?S.options)#?O.notify_tag
                 ),
                 {ok, S2};
@@ -387,21 +413,21 @@ notify_subscriber(
         {{_, OldValue}, {_, NewValue}} ->
             notify_subscriber(
                 Subscriber,
-                {{value, OldValue}, {value, NewValue}},
+                {Key, {value, OldValue}, {value, NewValue}},
                 Notifier,
                 Tag
             );
         {_, {_, NewValue}} ->
             notify_subscriber(
                 Subscriber,
-                {undefined, {value, NewValue}},
+                {Key, undefined, {value, NewValue}},
                 Notifier,
                 Tag
             );
         {{_, OldValue}, _} ->
             notify_subscriber(
                 Subscriber,
-                {{value, OldValue}, undefined},
+                {Key, {value, OldValue}, undefined},
                 Notifier,
                 Tag
             )
@@ -464,7 +490,14 @@ do_unsubscribe(#?S{subscribers = Subscribers}=S, Subscriber, Keys) ->
         {Keys2, Subscribers2} when Keys == undefined orelse Keys == Keys2 ->
             S#?S{subscribers = Subscribers2};
         {Keys2, Subscribers2} ->
-            S#?S{subscribers = Subscribers2#{Subscriber => Keys -- Keys2}};
+            S#?S{subscribers =
+                 case Keys2 -- Keys of
+                     [] ->
+                         Subscribers2;
+                     Keys3 ->
+                         Subscribers2#{Subscriber => Keys3}
+                 end
+            };
         _ ->
             S
     end.

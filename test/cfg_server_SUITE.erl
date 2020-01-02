@@ -107,7 +107,7 @@ end_per_testcase(_TestCase, _Cfg) ->
     
     ?assertMatch({ok, "2.2.2.2"}, cfg:get({ets, cfg}, host)),
     
-    ?assertMatch({my_tag, {{value, "1.1.1.1"}, {value, "2.2.2.2"}}}, receive {my_tag, _}=M -> M after 1000 -> timeout end),
+    ?assertMatch({my_tag, {host, {value, "1.1.1.1"}, {value, "2.2.2.2"}}}, receive {my_tag, _}=M -> M after 1000 -> timeout end),
     
     
     ok.
