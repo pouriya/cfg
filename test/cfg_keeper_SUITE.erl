@@ -78,9 +78,10 @@ end_per_testcase(_TestCase, _Cfg) ->
 
 '1'(Cfg) ->
     _ = Cfg,
-    _ = ets:new(cfg, [named_table]),
+    ?assertMatch(ok, cfg:init({ets, cfg})),
+    ?assertMatch(ok, cfg:init({ets, cfg})),
     
-    ?assertMatch(ok, cfg:keep([{k, v}], {ets, cfg})),
+    ?assertMatch(ok, cfg:load([{k, v}], {ets, cfg})),
     ?assertMatch([{k, v}], ets:lookup(cfg, k)),
     ?assertMatch({ok, v}, cfg:get({ets, cfg}, k)),
     ?assertMatch({ok, v2}, cfg:get({ets, cfg}, k2, v2)),
@@ -97,7 +98,6 @@ end_per_testcase(_TestCase, _Cfg) ->
     ?assertMatch(ok, cfg:delete({ets, cfg})),
     ?assertMatch([], ets:tab2list(cfg)),
     _ = ets:delete(cfg),
-    
     ok.
 
 

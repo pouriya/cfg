@@ -1,13 +1,72 @@
--module(cfg_keeper).
--author("pouriya").
--include("cfg_stacktrace.hrl").
-%% API
--export([init/1, keep/2, get/2, get/3, set/3, delete/2, delete/1]).
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
 
+%% -----------------------------------------------------------------------------
+-module(cfg_keeper).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
+
+%% API
+-export(
+    [
+        init/1,
+        load/2,
+        get/2,
+        get/3,
+        set/3,
+        delete/2,
+        delete/1
+    ]
+).
+
+%% -----------------------------------------------------------------------------
+%% Behavior callbacks:
+
+%% Initializing keeoer:
+-callback
+config_init(Opts :: any()) ->
+    ok | {error, {Reason :: atom(), ErrorParams :: map()}}.
+
+%% Accepts all configuration parameters as a proplist and loads them in keeper:
+-callback
+config_load(Opts :: any(), [] | [{atom(), term()}]) ->
+    ok | {error, {Reason :: atom(), ErrorParams :: map()}}.
+
+%% Tries to get key's corresponding value:
+-callback
+config_get(Opts :: any(), Key :: atom()) ->
+    {ok, Value :: term()}                             |
+    {error, {Reason :: atom(), ErrorParams :: map()}} |
+    not_foud.
+
+%% Sets key's corresponding value to 'Value' in keeper:
+-callback
+config_set(Opts :: any(), Key :: atom(), Value :: term()) ->
+    ok | {error, {Reason :: atom(), ErrorParams :: map()}}.
+
+%% Deletes key from keeper:
+-callback
+config_delete(Opts :: any(), Key :: atom()) ->
+    ok | {error, {Reason :: atom(), ErrorParams :: map()}}.
+
+%% Deletes all configuration and cleans everything related to keeper:
+-callback
+config_delete(Opts :: any()) ->
+    ok | {error, {Reason :: atom(), ErrorParams :: map()}}.
+
+%% -----------------------------------------------------------------------------
+%% Records & Macros & Includes:
+
+-include("cfg_stacktrace.hrl").
+
+%% -----------------------------------------------------------------------------
+%% API:
 
 init({Keeper, Opts}) ->
     Mod = module(Keeper),
-    try Mod:init_config(Opts) of
+    try Mod:config_init(Opts) of
         ok ->
             ok;
         {error, {Reason, ErrParams}=Info} when erlang:is_atom(Reason) andalso
@@ -15,7 +74,7 @@ init({Keeper, Opts}) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
@@ -27,13 +86,13 @@ init({Keeper, Opts}) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
                         returned_value => Other,
                         module => Mod,
-                        function => init_config
+                        function => config_init
                     }
                 }
             }
@@ -42,7 +101,7 @@ init({Keeper, Opts}) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
@@ -54,9 +113,9 @@ init({Keeper, Opts}) ->
     end.
 
 
-keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
+load({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
-    try Mod:keep_config(Opts, Cfg) of
+    try Mod:config_load(Opts, Cfg) of
         ok ->
             ok;
         {error, {Reason, ErrParams}=Info} when erlang:is_atom(Reason) andalso
@@ -64,7 +123,7 @@ keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
@@ -76,13 +135,13 @@ keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
                         returned_value => Other,
                         module => Mod,
-                        function => keep_config
+                        function => config_load
                     }
                 }
             }
@@ -91,7 +150,7 @@ keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
             {
                 error,
                 {
-                    keep_config,
+                    load_config,
                     #{
                         keeper => Keeper,
                         keeper_options => Opts,
@@ -105,7 +164,7 @@ keep({Keeper, Opts}, Cfg) when erlang:is_atom(Keeper) ->
 
 get({Keeper, Opts}, Keys) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
-    try Mod:get_config(Opts, Keys) of
+    try Mod:config_get(Opts, Keys) of
         {ok, _}=Ok ->
             Ok;
         not_found ->
@@ -134,7 +193,7 @@ get({Keeper, Opts}, Keys) when erlang:is_atom(Keeper) ->
                         keeper_options => Opts,
                         returned_value => Other,
                         module => Mod,
-                        function => get_config,
+                        function => config_get,
                         keys => Keys
                     }
                 }
@@ -168,7 +227,7 @@ get({Keeper, _}=KeeperOpts, Keys, Default) when erlang:is_atom(Keeper) ->
 
 set({Keeper, Opts}, Key, Value) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
-    try Mod:set_config(Opts, Key, Value) of
+    try Mod:config_set(Opts, Key, Value) of
         ok ->
             ok;
         {error, {Reason, ErrParams}=Info} when erlang:is_atom(Reason) andalso
@@ -196,7 +255,7 @@ set({Keeper, Opts}, Key, Value) when erlang:is_atom(Keeper) ->
                         keeper_options => Opts,
                         returned_value => Other,
                         module => Mod,
-                        function => set_config,
+                        function => config_set,
                         key => Key,
                         value => Value
                     }
@@ -223,7 +282,7 @@ set({Keeper, Opts}, Key, Value) when erlang:is_atom(Keeper) ->
 
 delete({Keeper, Opts}, Key) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
-    try Mod:delete_config(Opts, Key) of
+    try Mod:config_delete(Opts, Key) of
         ok ->
             ok;
         not_found ->
@@ -252,7 +311,7 @@ delete({Keeper, Opts}, Key) when erlang:is_atom(Keeper) ->
                         keeper_options => Opts,
                         returned_value => Other,
                         module => Mod,
-                        function => delete_config,
+                        function => config_delete,
                         key => Key
                     }
                 }
@@ -277,11 +336,11 @@ delete({Keeper, Opts}, Key) when erlang:is_atom(Keeper) ->
 
 delete({Keeper, Opts}) when erlang:is_atom(Keeper) ->
     Mod = module(Keeper),
-    try Mod:delete_config(Opts) of
+    try Mod:config_delete(Opts) of
         ok ->
             ok;
         {error, {Reason, ErrParams}=Info} when erlang:is_atom(Reason) andalso
-            erlang:is_map(ErrParams)    ->
+                                               erlang:is_map(ErrParams)    ->
             {
                 error,
                 {
@@ -323,6 +382,14 @@ delete({Keeper, Opts}) when erlang:is_atom(Keeper) ->
             }
     end.
 
+%% -----------------------------------------------------------------------------
+%% Internals:
+
+module(env) ->
+    cfg_keeper_env;
+
+module(ets) ->
+    cfg_keeper_ets;
 
 module(Atom) ->
     erlang:list_to_atom("cfg_keeper_" ++ erlang:atom_to_list(Atom)).
