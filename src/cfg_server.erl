@@ -387,10 +387,6 @@ notify_subscribers(
     _ = notify_subscriber(Keys, Subscriber, OldCfg, NewCfg, Notifier, Tag),
     notify_subscribers(Subscribers, OldCfg, NewCfg, Notifier, Tag);
 
-notify_subscribers([Subscriber | Subscribers], OldCfg, NewCfg, Notifier, Tag) ->
-    _ = notify_subscriber(Subscriber, config_reloaded, Notifier, Tag),
-    notify_subscribers(Subscribers, OldCfg, NewCfg, Notifier, Tag);
-
 notify_subscribers(_, _, _, _, _) ->
     ok.
 
