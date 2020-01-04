@@ -14,6 +14,7 @@
     start_link/5,
     
     reload/1,
+    async_reload/1,
     
     subscribe/2,
     subscribe/3,
@@ -29,13 +30,30 @@
     stop/1
 ]).
 
-%% 'gen_server' callbacks:
+%% 'gen_server' & 'gen_event' callbacks:
 -export([
     init/1,
-    handle_call/3,
-    handle_cast/2,
     handle_info/2,
     terminate/2
+]).
+
+%% 'gen_server' callbacks:
+-export([
+    handle_call/3,
+    handle_cast/2
+]).
+
+
+%% 'gen_event' callbacks:
+-export([
+    handle_call/2,
+    handle_event/2
+]).
+
+%% Local exports:
+-export([
+    signal_handler_pre_reload/2,
+    signal_handler_post_reload/3
 ]).
 
 %% -----------------------------------------------------------------------------
@@ -64,8 +82,23 @@
     notify_tag,
     change_priority,
     delete_on_terminate,
-    reload_on_signal
+    reload_on_signal,
+    signal_handler_pre_reload,
+    signal_handler_post_reload,
+    signal_handler_reload_sync
 }).
+
+-define(SHS, signal_handler_state).
+-record(
+    ?SHS,
+    {
+        signal,
+        register_name,
+        pre_reload_function,
+        post_reload_function,
+        sync_reload
+    }
+).
 
 -define(RELOAD_TAG, reload).
 -define(SUBSCRIBE_TAG, subscribe).
@@ -76,20 +109,31 @@
 -define(SET_KEEPER_TAG, set_keeper).
 -define(INFO_TAG, info).
 
+-include("cfg_stacktrace.hrl").
+
 %% -----------------------------------------------------------------------------
 %% API:
 
 start_link(RegisterName, Readers, Filters, Keeper, Opts) ->
-    gen_server:start_link(
-        RegisterName,
-        ?MODULE,
-        {RegisterName, Readers, Filters, Keeper, Opts},
-        []
-    ).
+    case cfg_filter:check(Filters) of
+        ok ->
+            gen_server:start_link(
+                RegisterName,
+                ?MODULE,
+                {RegisterName, Readers, Filters, Keeper, Opts},
+                []
+            );
+        Err ->
+            Err
+    end.
 
 
 reload(Proc) ->
     gen_server:call(Proc, ?RELOAD_TAG, infinity).
+
+
+async_reload(Proc) ->
+    gen_server:cast(Proc, ?RELOAD_TAG).
 
 
 subscribe(Proc, Keys) ->
@@ -144,6 +188,11 @@ stop(Server) ->
 %% -----------------------------------------------------------------------------
 %% 'gen_server' & 'gen_event' callbacks:
 
+%% 'gen_event':
+init(#?SHS{}=S) ->
+    {ok, S};
+init({#?SHS{}=S, _}) ->
+    {ok, S};
 %% 'gen_server':
 init({RegisterName, Readers, Filters, Keeper, Opts}) ->
     S = #?S{
@@ -159,7 +208,11 @@ init({RegisterName, Readers, Filters, Keeper, Opts}) ->
                 notify_tag = config,
                 change_priority = false,
                 delete_on_terminate = true,
-                reload_on_signal = false
+                reload_on_signal = false,
+                signal_handler_pre_reload =
+                    fun ?MODULE:signal_handler_pre_reload/2,
+                signal_handler_post_reload =
+                    fun ?MODULE:signal_handler_post_reload/3
             }
         ),
         register_name = RegisterName,
@@ -170,10 +223,7 @@ init({RegisterName, Readers, Filters, Keeper, Opts}) ->
             {ok, maybe_setup_signal_handler(S2)};
         {_, Info} ->
             {stop, Info}
-    end;
-%% 'gen_event':
-init(S) ->
-    {ok, S}.
+    end.
 
 
 %% 'gen_server':
@@ -215,7 +265,11 @@ handle_call({?UNSUBSCRIBE_TAG, Subscriber}, _, S) ->
     {reply, ok, do_unsubscribe(S, Subscriber)};
 
 handle_call({?CHANGE_OPTIONS_TAG, Opts}, _, S) ->
-    {reply, ok, S#?S{options = options(Opts, S#?S.options)}};
+    {
+        reply,
+        ok,
+        maybe_setup_signal_handler(S#?S{options = options(Opts, S#?S.options)})
+    };
 
 handle_call({?SET_READERS_TAG, Readers}, _, S) ->
     {reply, ok, S#?S{readers = Readers}};
@@ -265,15 +319,60 @@ handle_cast(_, S) ->
 %% -----------------------------------------------------------------------------
 %% 'gen_event' callbacks:
 
-handle_event(Signal, {Signal, Name}=S) ->
-    _ =
-        try
-            reload(Name)
-        catch
-            _:_ ->
-                ok
-        end,
-    {ok, S};
+handle_event(
+    Signal,
+    #?SHS{
+        register_name = RegisterName,
+        signal = Signal,
+        pre_reload_function = PreReload,
+        post_reload_function =  PostReload,
+        sync_reload = SyncReload
+    }=S
+) -> % Signal == Signal
+    try PreReload(RegisterName, Signal) of
+        ok ->
+            CallName =
+                case RegisterName of
+                    {local, LocalName} ->
+                        LocalName;
+                    _ ->
+                        RegisterName
+                end,
+            Result =
+                try
+                    if
+                        SyncReload ->
+                            reload(CallName);
+                        true ->
+                            async_reload(CallName)
+                    end
+                catch
+                    ?define_stacktrace(_, Reason, Stacktrace) ->
+                        {
+                            error,
+                            {
+                                reload_config,
+                                #{
+                                    reason => Reason,
+                                    stacktrace => ?get_stacktrace(Stacktrace),
+                                    register_name => RegisterName,
+                                    signal => Signal
+                                }
+                            }
+                        }
+                end,
+            _ =
+                try
+                    PostReload(RegisterName, Signal, Result)
+                catch
+                    _:_ ->
+                        ok
+                end,
+            {ok, S}
+    catch
+        _:_ ->
+            {ok, S}
+    end;
 
 handle_event(_, S) ->
     {ok, S}.
@@ -281,6 +380,16 @@ handle_event(_, S) ->
 
 handle_call(_, S) ->
     {ok, S}.
+
+%% -----------------------------------------------------------------------------
+%% Exported Internals:
+
+signal_handler_pre_reload(_, _) ->
+    ok.
+
+
+signal_handler_post_reload(_, _, _) ->
+    ok.
 
 %% -----------------------------------------------------------------------------
 %% Internals:
@@ -361,6 +470,48 @@ options(#{reload_on_signal := Value}=Opts, Rec) ->
                     Value;
                 true ->
                     false
+            end
+        }
+    );
+
+options(#{signal_handler_pre_reload := Value}=Opts, Rec) ->
+    options(
+        maps:remove(signal_handler_pre_reload, Opts),
+        Rec#?O{
+            signal_handler_pre_reload =
+            if
+                erlang:is_function(Value, 2) ->
+                    Value;
+                true ->
+                    fun ?MODULE:signal_handler_pre_reload/2
+            end
+        }
+    );
+
+options(#{signal_handler_post_reload := Value}=Opts, Rec) ->
+    options(
+        maps:remove(signal_handler_post_reload, Opts),
+        Rec#?O{
+            signal_handler_post_reload =
+            if
+                erlang:is_function(Value, 3) ->
+                    Value;
+                true ->
+                    fun ?MODULE:signal_handler_post_reload/3
+            end
+        }
+    );
+
+options(#{signal_handler_reload_sync := Value}=Opts, Rec) ->
+    options(
+        maps:remove(signal_handler_reload_sync, Opts),
+        Rec#?O{
+            signal_handler_reload_sync =
+            if
+                erlang:is_boolean(Value) ->
+                    Value;
+                true ->
+                    true
             end
         }
     );
@@ -497,10 +648,7 @@ notify_subscriber(
             );
         _ ->
             ok
-    end;
-
-notify_subscriber(_, _, _, _, _, _) ->
-    ok.
+    end.
 
 
 notify_subscriber(Subscriber, Msg, message, Tag) ->
@@ -547,57 +695,98 @@ do_unsubscribe(#?S{subscribers = Subscribers}=S, Subscriber) ->
     end.
 
 
-maybe_setup_signal_handler(#?S{options = #?O{reload_on_signal = false}}= S) ->
+maybe_setup_signal_handler(
+    #?S{
+        signal_handler_state = undefined,
+        options = #?O{reload_on_signal = false}
+    }= S
+) ->
+    S;
+
+maybe_setup_signal_handler(
+    #?S{
+        signal_handler_state = SHS, % Signal Handler State
+        options = #?O{reload_on_signal = false}
+    }= S
+) ->
+    _ =
+        try
+            gen_event:delete_handler(erl_signal_server, {?MODULE, SHS}, SHS)
+        catch
+            _:_ ->
+                ok
+        end,
     S#?S{signal_handler_state = undefined};
 
 maybe_setup_signal_handler(
     #?S{
-        options = #?O{reload_on_signal = Signal},
+        options = #?O{
+            reload_on_signal = Signal,
+            signal_handler_pre_reload = PreReload,
+            signal_handler_post_reload = PostReload,
+            signal_handler_reload_sync = Sync
+        },
         register_name = RegisterName
     }=S
 ) ->
-    case erlang:whereis(erl_signal_handler) of
-        undefined ->
-            S;
-        _ ->
-            S#?S{
-                signal_handler_state = setup_signal_handler(
-                    gen_event:which_handlers(erl_signal_server),
-                    RegisterName,
-                    Signal
-                )
-            }
-    end.
+    SHS = #?SHS{
+        signal = Signal,
+        register_name = RegisterName,
+        pre_reload_function = PreReload,
+        post_reload_function = PostReload,
+        sync_reload = Sync
+    },
+    _ = add_signal_handler(
+        try
+            gen_event:which_handlers(erl_signal_server)
+        catch
+            _:_ ->
+                []
+        end,
+        SHS
+    ),
+    S#?S{signal_handler_state = SHS}.
+
 
 %% Handler exists:
-setup_signal_handler(
-    [{?MODULE, {RegisterName, Signal}}=Handler | _],
-    RegisterName,
-    Signal
-) -> % RegisterName == RegisterName andalso Signal == Signal
-    Handler;
-%% I did register myself for other signal:
-setup_signal_handler(
-    [{?MODULE, {RegisterName, _}=S}=Handler | Handlers],
-    RegisterName,
-    NewSignal
+add_signal_handler(
+    [{?MODULE, Id} | _],
+    SHS
+) when SHS == Id ->
+    ok;
+%% I did register myself for other signal or pre-reload or post-reload funs:
+add_signal_handler(
+    [{?MODULE, #?SHS{register_name = RegisterName}=OldSHS}=Handler | _],
+    #?SHS{register_name = RegisterName, signal = Signal}=SHS
 ) -> % RegisterName == RegisterName
-    NewHandler = {?MODULE, {RegisterName, NewSignal}},
-    _ = gen_event:delete_handler(
-        erl_signal_server,
-        {Handler, S},
-        {NewHandler, {RegisterName, NewSignal}}
-    ),
-    NewHandler;
+    _ =
+        try
+            ok = gen_event:swap_handler(
+                erl_signal_server,
+                {Handler, OldSHS},
+                {{?MODULE, SHS}, SHS}
+            ),
+            os:set_signal(Signal, handle)
+        catch
+            _:_ ->
+                ok
+        end,
+    ok;
 
-setup_signal_handler([], RegisterName, Signal) ->
-    Handler = {?MODULE, {RegisterName, Signal}},
-    _ = gen_event:add_handler(
-        erl_signal_server,
-        Handler,
-        {RegisterName, Signal}
-    ),
-    Handler;
+add_signal_handler([], #?SHS{signal = Signal}=SHS) ->
+    _ =
+        try
+            _ = gen_event:add_handler(
+                erl_signal_server,
+                {?MODULE, SHS},
+                SHS
+            ),
+            os:set_signal(Signal, handle)
+        catch
+            _:_ ->
+                ok
+        end,
+    ok;
 
-setup_signal_handler([_ | Handlers], RegisterName, Signal) ->
-    setup_signal_handler(Handlers, RegisterName, Signal).
+add_signal_handler([_ | Handlers], SHS) ->
+    add_signal_handler(Handlers, SHS).
