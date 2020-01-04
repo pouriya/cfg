@@ -1,10 +1,76 @@
+%%% ----------------------------------------------------------------------------
+%%% @author <pouriya.jahanbakhsh@gmail.com>
+%%% @hidden
+
+%% -----------------------------------------------------------------------------
 -module(cfg_filter).
+-author('pouriya.jahanbakhsh@gmail.com').
+%% -----------------------------------------------------------------------------
+%% Exports:
+
+%% API
+-export(
+    [
+        do/2,
+        check/1,
+        get_filters/1
+    ]
+).
+
+%% -----------------------------------------------------------------------------
+%% Behaviour callback:
+
+-callback
+config_filters() -> Filters when
+    Filters :: [] | [Filter],
+    Filter :: any | '_'
+            | atom
+            | binary
+            | number
+            | integer
+            | float
+            | list
+            | boolean
+            | proplist
+            | atom_to_list
+            | list_to_atom
+            | list_to_binary
+            | list_to_integer
+            | list_to_float
+            | binary_to_list
+            | binary_to_integer
+            | binary_to_float
+            | atom_to_binary
+            | binary_to_atom
+            | proplist_to_map
+            | {'&', Filters} | {'and', Filters}
+            | {'|', Filters} | {'or', Filters}
+            | {proplist, Filters}
+            | {list, Filters}
+            | {f, function()}
+            | {mf, {module(), FunctionName :: atom()}}
+            | {one_of, [any()]}
+            | {size, Size},
+    Size :: number()
+          | {min, number()}
+          | {max, number()}
+          | {Min :: number(), Max :: number()}.
+
+%% -----------------------------------------------------------------------------
+%% Records & Macros & Includes:
 
 -include("cfg_stacktrace.hrl").
 
-%% API
--export([do/2, check/1]).
+%% -----------------------------------------------------------------------------
+%% API:
 
+do(AppName, Cfg) when erlang:is_atom(AppName) ->
+    case get_filters(AppName) of
+        {ok, Filters} ->
+            do(Filters, Cfg);
+        Err ->
+            Err
+    end;
 
 do(Filters, Cfg) ->
     case filter(Filters, Cfg, [], [], 1) of
@@ -16,8 +82,35 @@ do(Filters, Cfg) ->
 
 
 check(Filters) ->
-    check_filters(Filters, 1).
+    case check_filters(Filters, 1) of
+        ok ->
+            ok;
+        {_, ErrParams} ->
+            {error, {check_filters, ErrParams#{filters => Filters}}}
+    end.
 
+
+get_filters(AppName) ->
+    case application:get_key(AppName, modules) of
+        {ok, Mods} ->
+            case get_modules_filters(Mods, []) of
+                {ok, _}=Ok ->
+                    Ok;
+                {_, {Reason, ErrParams}} ->
+                    {error, {Reason, ErrParams#{application => AppName}}}
+            end;
+        _ -> % undefined
+            {
+                error,
+                {
+                    application_filters,
+                    #{application => AppName, reason => not_found}
+                }
+            }
+    end.
+
+%% -----------------------------------------------------------------------------
+%% Internals:
 
 filter(
     [{Key, KeyFilter, Default}=Filter | Filters],
@@ -600,3 +693,41 @@ check_key_filter({one_of, List}) ->
 
 check_key_filter(_) ->
     {error, #{reason => unknown_filter}}.
+
+
+get_modules_filters([Mod | Mods], Filters) ->
+    try erlang:function_exported(Mod, config_filters, 0) andalso
+        Mod:config_filters()
+    of
+        false ->
+            get_modules_filters(Mods, Filters);
+        ModFilters ->
+            case check(ModFilters) of
+                ok ->
+                    get_modules_filters(Mods, Filters ++ ModFilters);
+                {_, Info} ->
+                    {
+                        error,
+                        {
+                            application_filters,
+                            #{module => Mod, previous_error => Info}
+                        }
+                    }
+            end
+    catch
+        ?define_stacktrace(_, Reason, Stacktrace) ->
+            {
+                error,
+                {
+                    application_filters
+                    #{
+                        module => Mod,
+                        reason => Reason,
+                        stacktrace => ?get_stacktrace(Stacktrace)
+                    }
+                }
+            }
+    end;
+
+get_modules_filters(_, Filters) ->
+    {ok, Filters}.

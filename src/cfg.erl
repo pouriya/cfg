@@ -23,7 +23,8 @@
 -export(
     [
         filter/2,
-        check_filters/1
+        check_filters/1,
+        get_application_filters/1
     ]
 ).
 
@@ -47,8 +48,8 @@
         reload/1,
         subscribe/2,
         subscribe/3,
+        unsubscribe/1,
         unsubscribe/2,
-        unsubscribe/3,
         change_options/2,
         set_readers/2,
         set_filters/2,
@@ -139,6 +140,10 @@ filter(Cfg, Filters) ->
 check_filters(Filters) ->
     cfg_filter:check(Filters).
 
+
+get_application_filters(AppName) ->
+    cfg_filter:get_filters(AppName).
+
 %% -----------------------------------------------------------------------------
 %% Keeper API:
 
@@ -184,20 +189,21 @@ subscribe(Server, Keys) ->
     cfg_server:subscribe(Server, Keys).
 
 
-unsubscribe(Server, Keys) ->
-    cfg_server:unsubscribe(Server, Keys).
+unsubscribe(Server) ->
+    cfg_server:unsubscribe(Server).
 
 
-subscribe(Server, Keys, Subscriber) ->
-    cfg_server:subscribe(Server, Keys, Subscriber).
+subscribe(Server, Filters, Subscriber) ->
+    cfg_server:subscribe(Server, Filters, Subscriber).
 
 
-unsubscribe(Server, Keys, Subscriber) ->
-    cfg_server:unsubscribe(Server, Keys, Subscriber).
+unsubscribe(Server, Subscriber) ->
+    cfg_server:unsubscribe(Server, Subscriber).
 
 
 change_options(Server, Opts) ->
     cfg_server:change_options(Server, Opts).
+
 
 set_readers(Proc, Readers) ->
     cfg_server:set_readers(Proc, Readers).
