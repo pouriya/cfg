@@ -92,14 +92,14 @@ end_per_testcase(_TestCase, _Cfg) ->
     _ = ets:new(cfg, [named_table, public]),
     
     _ = erlang:process_flag(trap_exit, true),
-    Result = cfg_server:start_link({local, cfg}, [{env, cfg}], Filters, {ets, cfg}, #{error_unknown_config => false, notify_tag => my_tag, delete_on_terminate => true, change_priority => true, notify => message}),
+    Result = cfg_server:start_link({local, cfg}, [{env, cfg}], Filters, {ets, cfg}, #{error_unknown_config => false, notify_tag => my_tag, delete_on_terminate => true, change_priority => true, notify_method => message}),
     ?assertMatch({ok, _}, Result),
    
     ?assertMatch({ok, "1.1.1.1"}, cfg:get({ets, cfg}, host)),
 
-    ?assertMatch(ok, cfg_server:subscribe(cfg, host)),
-    ?assertMatch(ok, cfg_server:subscribe(cfg, host)),
-    ?assertMatch(ok, cfg_server:subscribe(cfg, port)),
+    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
+    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
+    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
     
     _ = application:set_env(cfg, host, <<"2.2.2.2">>),
     
@@ -107,7 +107,7 @@ end_per_testcase(_TestCase, _Cfg) ->
     
     ?assertMatch({ok, "2.2.2.2"}, cfg:get({ets, cfg}, host)),
     
-    ?assertMatch({my_tag, {host, {value, "1.1.1.1"}, {value, "2.2.2.2"}}}, receive {my_tag, _}=M -> M after 1000 -> timeout end),
+    ?assertMatch({my_tag, {{value, [{host, "1.1.1.1"}, _]}, {value, [{host, "2.2.2.2"}, _]}}}, receive M -> M after 1000 -> timeout end),
     
     
     ok.
