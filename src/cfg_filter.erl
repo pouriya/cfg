@@ -499,6 +499,14 @@ filter_list([], _, _, Unknown, Ret) ->
     {ok, lists:reverse(Ret), Unknown}.
 
 
+check_filters(AppName, _) when erlang:is_atom(AppName) ->
+    case get_filters(AppName) of
+        {ok, _} ->
+            ok;
+        Err ->
+            Err
+    end;
+
 check_filters([Filter | Filters], Index) ->
     case check_filter(Filter) of
         ok ->
@@ -650,19 +658,7 @@ check_key_filter({proplist, Filters}) ->
     end;
 
 check_key_filter({list, Filters}) ->
-    case Filters of
-        [Filter | Filters2] ->
-            case check_key_filter(Filter) of
-                ok ->
-                    check_key_filter({list, Filters2});
-                {_, ErrParams} ->
-                    {error, #{reason => bad_list, previous_error => ErrParams}}
-            end;
-        [] ->
-            ok;
-        _ ->
-            {error, #{reason => bad_list}}
-    end;
+    check_key_filter(Filters);
 
 check_key_filter({size, Size}) ->
     case Size of
