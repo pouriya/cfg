@@ -190,6 +190,10 @@ Shell got {
 ok
 ```
 
+## Todo
+Complete documentation about readers, filters, keeper and server.
+
+
 ## `Author`
 `pouriya.jahanbakhsh@gmail.com`
 
