@@ -21,8 +21,7 @@
         ,'6'/1
         ,'7'/1
         ,'8'/1
-        ,'9'/1
-        ,'10'/1]).
+        ,'9'/1]).
 
 %% -----------------------------------------------------------------------------
 %% Records & Macros & Includes:
@@ -75,80 +74,86 @@ end_per_testcase(_TestCase, _Cfg) ->
 %% -----------------------------------------------------------------------------
 %% Test cases:
 
-
-'1'(Cfg) ->
-    _ = Cfg,
-    ?assertMatch(ok, cfg:init({ets, cfg})),
-    ?assertMatch(ok, cfg:init({ets, cfg})),
-    
-    ?assertMatch(ok, cfg:load([{k, v}], {ets, cfg})),
-    ?assertMatch([{k, v}], ets:lookup(cfg, k)),
-    ?assertMatch({ok, v}, cfg:get({ets, cfg}, k)),
-    ?assertMatch({ok, v2}, cfg:get({ets, cfg}, k2, v2)),
-    ?assertMatch(not_found, cfg:get({ets, cfg}, k2)),
-    
-    ?assertMatch(ok, cfg:set({ets, cfg}, k2, v2)),
-    ?assertMatch({ok, v2}, cfg:get({ets, cfg}, k2)),
-    ?assertMatch({ok, v2}, cfg:get({ets, cfg}, k2, k2)),
-    
-    ?assertMatch(ok, cfg:delete({ets, cfg}, k)),
-    ?assertMatch(not_found, cfg:get({ets, cfg}, k)),
-    ?assertMatch([{k2, v2}], ets:tab2list(cfg)),
-    
-    ?assertMatch(ok, cfg:delete({ets, cfg})),
-    ?assertMatch([], ets:tab2list(cfg)),
-    _ = ets:delete(cfg),
-    ok.
-
-
-'2'(Cfg) ->
-    _ = Cfg,
+'1'(_) ->
+    % init:
+    ?assertMatch(ok, cfg:init({test, ok})),
+    ?assertMatch({error, {init_config_keeper, #{k := v}}}, cfg:init({test, {error, #{k => v}}})),
+    ?assertMatch({error, {init_config_keeper, #{returned_value := unknown}}}, cfg:init({test, unknown})),
+    ?assertMatch({error, {init_config_keeper, #{exception := oops}}}, cfg:init({test, {exception, oops}})),
     ok.
 
 
 
-'3'(Cfg) ->
-    _ = Cfg,
+'2'(_) ->
+    % set/2:
+    ?assertMatch(ok, cfg:set({test, fun(X) -> X end}, ok)),
+    ?assertMatch({error, {set_config, #{k := v}}}, cfg:set({test, fun(X) -> X end}, {error, #{k => v}})),
+    ?assertMatch({error, {set_config, #{returned_value := unknown}}}, cfg:set({test, fun(X) -> X end}, unknown)),
+    ?assertMatch({error, {set_config, #{exception := oops}}}, cfg:set({test, fun(X) -> erlang:error(X) end}, oops)),
     ok.
 
 
 
-'4'(Cfg) ->
-    _ = Cfg,
+'3'(_) ->
+    % set/3:
+    ?assertMatch(ok, cfg:set({test, fun(X, _) -> X end}, ok, undef)),
+    ?assertMatch({error, {set_config, #{k := v}}}, cfg:set({test, fun(X, _) -> X end}, {error, #{k => v}}, undef)),
+    ?assertMatch({error, {set_config, #{returned_value := unknown}}}, cfg:set({test, fun(X, _) -> X end}, unknown, undef)),
+    ?assertMatch({error, {set_config, #{exception := oops}}}, cfg:set({test, fun(X, _) -> erlang:error(X) end}, oops, undef)),
     ok.
 
 
 
-'5'(Cfg) ->
-    _ = Cfg,
+'4'(_) ->
+    % get/1:
+    ?assertMatch({ok, []}, cfg:get({test, {ok, []}})),
+    ?assertMatch({error, {get_config, #{k := v}}}, cfg:get({test, {error, #{k => v}}})),
+    ?assertMatch({error, {get_config, #{returned_value := unknown}}}, cfg:get({test, unknown})),
+    ?assertMatch({error, {get_config, #{exception := oops}}}, cfg:get({test, {exception, oops}})),
     ok.
 
 
 
-'6'(Cfg) ->
-    _ = Cfg,
+'5'(_) ->
+    % get/2:
+    ?assertMatch({ok, value}, cfg:get({test, fun(X) -> X end}, {ok, value})),
+    ?assertMatch(not_found, cfg:get({test, fun(X) -> X end}, not_found)),
+    ?assertMatch({error, {get_config, #{k := v}}}, cfg:get({test, fun(X) -> X end}, {error, #{k => v}})),
+    ?assertMatch({error, {get_config, #{returned_value := unknown}}}, cfg:get({test, fun(X) -> X end}, unknown)),
+    ?assertMatch({error, {get_config, #{exception := oops}}}, cfg:get({test, fun(X) -> erlang:error(X) end}, oops)),
     ok.
 
 
 
-'7'(Cfg) ->
-    _ = Cfg,
+'6'(_) ->
+    % get/3:
+    ?assertMatch({ok, value}, cfg:get({test, fun(X) -> X end}, {ok, value}, default)),
+    ?assertMatch({ok, default}, cfg:get({test, fun(X) -> X end}, not_found, default)),
     ok.
 
 
 
-'8'(Cfg) ->
-    _ = Cfg,
+'7'(_) ->
+    % delete/2:
+    ?assertMatch(ok, cfg:delete({test, fun(X) -> X end}, ok)),
+    ?assertMatch({error, {delete_config, #{k := v}}}, cfg:delete({test, fun(X) -> X end}, {error, #{k => v}})),
+    ?assertMatch({error, {delete_config, #{returned_value := unknown}}}, cfg:delete({test, fun(X) -> X end}, unknown)),
+    ?assertMatch({error, {delete_config, #{exception := oops}}}, cfg:delete({test, fun(X) -> erlang:error(X) end}, oops)),
     ok.
 
 
 
-'9'(Cfg) ->
-    _ = Cfg,
+'8'(_) ->
+    % delete/1:
+    ?assertMatch(ok, cfg:delete({test, ok})),
+    ?assertMatch({error, {delete_config, #{k := v}}}, cfg:delete({test, {error, #{k => v}}})),
+    ?assertMatch({error, {delete_config, #{returned_value := unknown}}}, cfg:delete({test, unknown})),
+    ?assertMatch({error, {delete_config, #{exception := oops}}}, cfg:delete({test, {exception, oops}})),
     ok.
 
 
 
-'10'(Cfg) ->
-    _ = Cfg,
+'9'(_) ->
+    _ = cfg_keeper:module(env),
+    _ = cfg_keeper:module(ets),
     ok.

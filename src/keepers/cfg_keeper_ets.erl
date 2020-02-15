@@ -13,9 +13,10 @@
 -export(
     [
         config_init/1,
-        config_load/2,
-        config_get/2,
+        config_set/2,
         config_set/3,
+        config_get/1,
+        config_get/2,
         config_delete/2,
         config_delete/1
     ]
@@ -31,15 +32,22 @@ config_init({Tab, Opts}) when erlang:is_atom(Tab) andalso
                               erlang:is_list(Opts)     ->
     ensure_table(Tab, Opts).
 
-config_load(Tab, Cfg) when erlang:is_atom(Tab) ->
+config_set(Tab, Cfg) when erlang:is_atom(Tab) ->
     InsertFun =
         fun({Key, Value}) ->
             ets:insert(Tab, {Key, Value})
         end,
     lists:foreach(InsertFun, Cfg); %% ok
 
-config_load({Tab, _}, Cfg) when erlang:is_atom(Tab) ->
-    config_load(Tab, Cfg).
+config_set({Tab, _}, Cfg) when erlang:is_atom(Tab) ->
+    config_set(Tab, Cfg).
+
+
+config_get(Tab) when erlang:is_atom(Tab) ->
+    {ok, ets:tab2list(Tab)};
+
+config_get({Tab, _}) when erlang:is_atom(Tab) ->
+    config_get(Tab).
 
 
 config_get(Tab, Key) when erlang:is_atom(Tab) ->

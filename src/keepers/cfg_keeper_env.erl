@@ -13,9 +13,10 @@
 -export(
     [
         config_init/1,
-        config_load/2,
-        config_get/2,
+        config_set/2,
         config_set/3,
+        config_get/1,
+        config_get/2,
         config_delete/2,
         config_delete/1
     ]
@@ -32,17 +33,29 @@ config_init({App, EnvKey}) when erlang:is_atom(App) andalso
     ok.
 
 
-config_load(App, Cfg) when erlang:is_atom(App) ->
+config_set(App, Cfg) when erlang:is_atom(App) ->
     SetEnvFun =
         fun({Key, Value}) ->
             application:set_env(App, Key, Value)
         end,
     lists:foreach(SetEnvFun, Cfg);
 
-config_load({App, EnvKey}, Cfg) when erlang:is_atom(App) andalso
-                                     erlang:is_atom(EnvKey)   ->
+config_set({App, EnvKey}, Cfg) when erlang:is_atom(App) andalso
+                                    erlang:is_atom(EnvKey)   ->
     _ = application:set_env(App, EnvKey, Cfg),
     ok.
+
+
+config_get(App) when erlang:is_atom(App) ->
+    {ok, application:get_all_env(App)};
+
+config_get({App, EnvKey}) when erlang:is_atom(App) ->
+    case application:get_env(App, EnvKey) of
+        {_, Cfg} ->
+            {ok, Cfg};
+        _ ->
+            {ok, []}
+    end.
 
 
 config_get(App, Key) when erlang:is_atom(App) ->

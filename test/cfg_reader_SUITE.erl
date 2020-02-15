@@ -75,41 +75,190 @@ end_per_testcase(_TestCase, _Cfg) ->
 %% -----------------------------------------------------------------------------
 %% Test cases:
 
+'1'(_) ->
+    ?assertMatch([], cfg_reader:normalize(#{})),
+    ?assertMatch([1, 3.14, <<"foo">>, [{key, [[{bar, baz}]]}], atom], cfg_reader:normalize([1, 3.14, "foo", #{key => [#{bar => baz}]}, atom])),
 
-'1'(Cfg) ->
-    _ = Cfg,
+    ?assertMatch(ok, cfg:is_cfg([])),
+    ?assertMatch(ok, cfg:is_cfg([{k, v}])),
+    ?assertMatch(ok, cfg:is_cfg([{k, v}, {k2, v2}])),
+    ?assertMatch(
+        ok,
+        cfg:is_cfg(
+            [
+                {k, v},
+                {k3, [{k4, [1, 3.14, <<"foo">>, [bar, baz]]}]},
+                {k2, v2}
+            ]
+        )
+    ),
+
+    ?assertMatch(
+        {error, {check_config, #{allowed_type := proplist}}},
+        cfg:is_cfg(bad_cfg)
+    ),
+
+    ?assertMatch(
+        {error, {check_config, #{allowed_type := proplist}}},
+        cfg:is_cfg([{k, v}, bad_cfg])
+    ),
+
+    ?assertMatch(
+        {
+            error,
+            {
+                check_config,
+                #{
+                    allowed_type := atom,
+                    key := <<"key">>,
+                    parent_keys := [k],
+                    reason := bad_key
+                }
+            }
+        },
+        cfg:is_cfg([{k, [{<<"key">>, value}]}])
+    ),
+
+    ?assertMatch(
+        {
+            error,
+            {
+                check_config,
+                #{
+                    allowed_types := [proplist,list,atom,binary,number],
+                    key := key,
+                    list_element := {this_is,bad,list_element},
+                    parent_keys := [k]
+                }
+            }
+        },
+        cfg:is_cfg([{k, [{key, [{this_is, bad, list_element}]}]}])
+    ),
+
+    ?assertMatch(
+        {
+            error,
+            {
+                check_config,
+                #{
+                    allowed_type := list,
+                    key := key,
+                    list := list,
+                    parent_keys := [k]
+                }
+            }
+        },
+        cfg:is_cfg([{k, [{key, [bad|list]}]}])
+    ),
+    ok.
+
+'2'(_) ->
     _ = cfg_test_utils:clean_env(),
-    _ = application:set_env(cfg, k, [{k2, v2}]),
-    
-    ?assertMatch({ok, [{k, [{k2, v2}]}]}, cfg:read([{env, cfg}])),
-    
-    ?assertMatch({ok, [{k, [{k2, v2}]}]}, cfg:read([{env, cfg}, {env, cfg}, {env, cfg}])),
-    
-    ?assertMatch({ok, [{k2, v2}]}, cfg:read([{env, {cfg, k}}])),
-    ?assertMatch({error,_}, cfg:read([{env, {cfg, undefined_key}}])),
-    
-    ?assertMatch({error, _}, cfg:read(bad_readers)),
+    Cfg = [
+        {k5, [{k6, [1, {k7, bar}, 3.14, [<<"baz">>]]}]}
+    ],
+    _ = cfg_test_utils:set_env(Cfg),
+
+    ?assertMatch(
+        {
+            ok,
+            [
+                {
+                    env,
+                    cfg,
+                    [{k5, [{k6, [1, {k7, bar}, 3.14, [<<"baz">>]]}]}]
+                }
+            ],
+            [
+                {
+                    k5,
+                    [
+                        {
+                            k6,
+                            [1, {k7, bar, [{env, cfg}]}, 3.14, [<<"baz">>]],
+                            [{env, cfg}]
+                        }
+                    ],
+                    [{env, cfg}]
+                }
+            ]
+        },
+        cfg:read([{env, cfg}])
+    ),
+
+    _ = cfg_test_utils:clean_env(),
+    Cfg2 = [{k, [{k2, v2}]}],
+    _ = cfg_test_utils:set_env(Cfg2),
+
+    ?assertMatch(
+        {
+            ok,
+            [
+                {env,cfg,[{k,[{k2,v2}]}]},
+                {env,cfg,[{k,[{k2,v2}]}]},
+                {env,cfg,[{k,[{k2,v2}]}]}
+            ],
+            [{k,[{k2,v2,[{env,cfg}]}],[{env,cfg}]}]},
+        cfg:read([{env, cfg}, {env, cfg}, {env, cfg}])
+    ),
+
+    ?assertMatch(
+        {
+            ok,
+            [{env, {cfg, k}, [{k2, v2}]}],
+            [{k2, v2, [{env, {cfg, k}}]}]
+        },
+        cfg:read([{env, {cfg, k}}])
+    ),
+
+
+    _ = cfg_test_utils:clean_env(),
+    Cfg3 = [
+        {foo, [{k2, v2}, {k3, v3}, {k4, [{k5, <<"foo">>}]}]},
+        {bar, [{k2, v3}, {k3, v3}, {k4, [{k5, <<"bar">>}]}]}
+    ],
+    _ = cfg_test_utils:set_env(Cfg3),
+    ?assertMatch(
+        {
+            ok,
+            [
+                {env, {cfg, foo}, [{k2, v2}, {k3, v3}, {k4, [{k5, <<"foo">>}]}]},
+                {env, {cfg, bar}, [{k2, v3}, {k3, v3}, {k4, [{k5, <<"bar">>}]}]}
+            ],
+            [
+                {k2, v3, [{env, {cfg, bar}}]},
+                {k3, v3, [{env, {cfg, bar}}]},
+                {
+                    k4,
+                    [{k5, <<"bar">>, [{env, {cfg, bar}}]}],
+                    [{env, {cfg, bar}}, {env, {cfg, foo}}]
+                }
+            ]
+        },
+        cfg:read([{env, {cfg, foo}}, {env, {cfg, bar}}])
+    ),
     ?assertMatch({error, _}, cfg:read([bad_reader])),
-    
+
+
     _ = cfg_test_utils:clean_env(),
     _ = application:set_env(cfg, k, erlang:self()),
     ?assertMatch({error, {_, #{previous_error :=  {check_config, _}}}}, cfg:read([{env, cfg}])),
-    
-    ?assertMatch({error, {_, #{previous_error :=  {oops, _}}}}, cfg:read([{test, {error, {oops, #{}}}}])),
+
+    ?assertMatch({error, {_, #{k := v}}}, cfg:read([{test, {error, #{k => v}}}])),
     ?assertMatch({error, {_, #{returned_value :=  unknown_ret}}}, cfg:read([{test, unknown_ret}])),
     ?assertMatch({error, {_, #{exception :=  oops}}}, cfg:read([{test, {exception, oops}}])),
-    
-    ok.
 
-
-'2'(Cfg) ->
-    _ = Cfg,
     ok.
 
 
 
 '3'(Cfg) ->
     _ = Cfg,
+    % Complete coverage:
+    _ = cfg_reader:module(env),
+    _ = cfg_reader:module(erl),
+    _ = cfg_reader:module(shell),
+    _ = cfg_reader:module(x),
     ok.
 
 

@@ -17,14 +17,19 @@
 ).
 
 %% Reader API:
--export([read/1]).
+-export(
+    [
+        read/1,
+        is_cfg/1
+    ]
+).
 
 %% Filter API:
 -export(
     [
         filter/2,
-        check_filters/1,
-        get_application_filters/1
+        get_application_filters/1,
+        get_module_filters/1
     ]
 ).
 
@@ -32,10 +37,11 @@
 -export(
     [
         init/1,
-        load/2,
+        set/2,
+        set/3,
+        get/1,
         get/2,
         get/3,
-        set/3,
         delete/2,
         delete/1
     ]
@@ -64,10 +70,10 @@
 
 load(Readers, Filters, Keeper) ->
     case read_and_filter(Readers, Filters) of
-        {ok, Cfg, Unknown}=Ok ->
+        {ok, Cfg}=Ok ->
             case init(Keeper) of
                 ok ->
-                    case load(Cfg, Keeper) of
+                    case set(Cfg, Keeper) of
                         ok ->
                             Ok;
                         {_, {Reason, ErrParams}} ->
@@ -78,8 +84,7 @@ load(Readers, Filters, Keeper) ->
                                     ErrParams#{
                                         readers => Readers,
                                         filters => Filters,
-                                        config => Cfg,
-                                        unknown_config => Unknown
+                                        config => Cfg
                                     }
                                 }
                             }
@@ -92,8 +97,7 @@ load(Readers, Filters, Keeper) ->
                             ErrParams#{
                                 readers => Readers,
                                 filters => Filters,
-                                config => Cfg,
-                                unknown_config => Unknown
+                                config => Cfg
                             }
                         }
                     }
@@ -115,7 +119,7 @@ load(Readers, Filters, Keeper) ->
 
 read_and_filter(Readers, Filters) ->
     case read(Readers) of
-        {ok, Cfg} ->
+        {ok, _, Cfg} ->
             filter(Cfg, Filters);
         {_, {Reason, ErrParams}} ->
             {
@@ -130,6 +134,10 @@ read_and_filter(Readers, Filters) ->
 read(Readers) ->
     cfg_reader:do(Readers).
 
+
+is_cfg(Cfg) ->
+    cfg_reader:is_cfg(Cfg).
+
 %% -----------------------------------------------------------------------------
 %% Filter API:
 
@@ -137,12 +145,12 @@ filter(Cfg, Filters) ->
     cfg_filter:do(Filters, Cfg).
 
 
-check_filters(Filters) ->
-    cfg_filter:check(Filters).
-
-
 get_application_filters(AppName) ->
-    cfg_filter:get_filters(AppName).
+    cfg_filter:get_application_filters(AppName).
+
+
+get_module_filters(Mod) ->
+    cfg_filter:get_module_filters(Mod).
 
 %% -----------------------------------------------------------------------------
 %% Keeper API:
@@ -151,8 +159,16 @@ init(Keeper) ->
     cfg_keeper:init(Keeper).
 
 
-load(Cfg, Keeper) ->
-    cfg_keeper:load(Keeper, Cfg).
+set(Keeper, Cfg) ->
+    cfg_keeper:set(Keeper, Cfg).
+
+
+set(Keeper, Keys, Value) ->
+    cfg_keeper:set(Keeper, Keys, Value).
+
+
+get(Keeper) ->
+    cfg_keeper:get(Keeper).
 
 
 get(Keeper, Keys) ->
@@ -161,10 +177,6 @@ get(Keeper, Keys) ->
 
 get(Keeper, Keys, Default) ->
     cfg_keeper:get(Keeper, Keys, Default).
-
-
-set(Keeper, Keys, Value) ->
-    cfg_keeper:set(Keeper, Keys, Value).
 
 
 delete(Keeper, Keys) ->

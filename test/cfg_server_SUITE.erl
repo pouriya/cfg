@@ -77,44 +77,85 @@ end_per_testcase(_TestCase, _Cfg) ->
 
 
 '1'(_) ->
+    _ = cfg_test_utils:config([]),
+    Opts = #{
+        notify_tag => config,
+        change_priority => false,
+        delete_on_terminate => true,
+        reload_on_signal => false,
+        signal_handler_pre_reload => fun cfg_server:default_pre_reload/0,
+        signal_handler_post_reload => fun cfg_server:default_post_reload/1,
+        signal_handler_reload_sync => true,
+        reload_on_timer => false,
+        timer_pre_reload => fun cfg_server:default_pre_reload/0,
+        timer_post_reload => fun cfg_server:default_post_reload/1
+    },
+    ?assertMatch({ok, _}, cfg:start_link({local, cfg}, [{env, cfg}], [], {ets, cfg}, Opts)),
+    ?assertMatch({ok, []}, cfg:get({ets, cfg})),
+    ?assertMatch(ok, cfg:reload(cfg)),
+    ?assertMatch({ok, []}, cfg:get({ets, cfg})),
+    _ = cfg_test_utils:config([{config, [{k, v}]}]),
+    ?assertMatch(ok, cfg:set_readers(cfg, [{env, {cfg, config}}])),
+    ?assertMatch(ok, cfg:reload(cfg)),
+    ?assertMatch({ok, []}, cfg:get({ets, cfg})),
+    ?assertMatch(ok, cfg:set_filters(cfg, [{k, atom}, {k2, any, default}])),
+    ?assertMatch(ok, cfg:change_options(cfg, #{change_priority => true})),
+    ?assertMatch(ok, cfg:reload(cfg)),
+    ?assertMatch({ok, v}, cfg:get({ets, cfg}, k)),
+    ?assertMatch({ok, default}, cfg:get({ets, cfg}, k2)),
+    ?assertMatch(ok, cfg:stop(cfg)),
+
+
+
+
+
     _ = cfg_test_utils:clean_env(),
     Cfg = [
               {host, <<"1.1.1.1">>},
               {port, 8080}
           ],
-    _ = lists:foreach(fun({K, V}) -> application:set_env(cfg, K, V) end, Cfg),
-    ?assertMatch([_, _], application:get_all_env(cfg)),
-    
+    cfg_test_utils:set_env(Cfg),
     Filters = [
                   {host, {'&', [binary, binary_to_list]}, "127.0.0.1"},
                   {port, {'&', [integer, {size, {0, 65535}}]}}
               ],
-    _ = ets:new(cfg, [named_table, public]),
-    
+
     _ = erlang:process_flag(trap_exit, true),
-    Result = cfg_server:start_link({local, cfg}, [{env, cfg}], Filters, {ets, cfg}, #{error_unknown_config => false, notify_tag => my_tag, delete_on_terminate => true, change_priority => true, notify_method => message}),
+    Result = cfg:start_link({local, cfg}, [{env, cfg}], Filters, {ets, cfg}, #{error_unknown_config => false, notify_tag => my_tag, delete_on_terminate => true, change_priority => true, notify_method => message}),
     ?assertMatch({ok, _}, Result),
-   
+
     ?assertMatch({ok, "1.1.1.1"}, cfg:get({ets, cfg}, host)),
 
-    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
-    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
-    ?assertMatch(ok, cfg_server:subscribe(cfg, Filters)),
-    
+    ?assertMatch(ok, cfg:subscribe(cfg, Filters)),
+    ?assertMatch(ok, cfg:subscribe(cfg, Filters)),
+    ?assertMatch(ok, cfg:subscribe(cfg, Filters)),
+
     _ = application:set_env(cfg, host, <<"2.2.2.2">>),
-    
-    ?assertMatch(ok, cfg_server:reload(cfg)),
-    
+    ?assertMatch(ok, cfg:reload(cfg)),
     ?assertMatch({ok, "2.2.2.2"}, cfg:get({ets, cfg}, host)),
-    
     ?assertMatch({my_tag, {{value, [{host, "1.1.1.1"}, _]}, {value, [{host, "2.2.2.2"}, _]}}}, receive M -> M after 1000 -> timeout end),
-    
-    
+
+    ?assertMatch(ok, cfg:change_options(cfg, #{notify_method => cast})),
+    _ = application:set_env(cfg, host, <<"3.3.3.3">>),
+    ?assertMatch(ok, cfg:reload(cfg)),
+    ?assertMatch({ok, "3.3.3.3"}, cfg:get({ets, cfg}, host)),
+    ?assertMatch({my_tag, {{value, [{host, "2.2.2.2"}, _]}, {value, [{host, "3.3.3.3"}, _]}}}, receive {'$gen_cast', M} -> M after 1000 -> timeout end),
+
+    ?assertMatch(ok, cfg:change_options(cfg, #{notify_method => call})),
+    _ = application:set_env(cfg, host, <<"2.2.2.2">>),
+    ?assertMatch(ok, cfg_server:async_reload(cfg)),
+    ?assertMatch({my_tag, {{value, [{host, "3.3.3.3"}, _]}, {value, [{host, "2.2.2.2"}, _]}}}, receive {'$gen_call', From, M} -> gen:reply(From, ok), M after 1000 -> timeout end),
+
     ok.
 
 
-'2'(Cfg) ->
-    _ = Cfg,
+'2'(_) ->
+    _ = cfg_test_utils:config([]),
+    ?assertMatch({ok, _}, cfg:start_link({local, cfg}, [{env, cfg}], [], {ets, cfg}, #{})),
+    ?assertMatch({ok, []}, cfg:get({env, cfg})),
+    ?assertMatch(ok, cfg:reload(cfg)),
+    ?assertMatch({ok, []}, cfg:get({env, cfg})),
+
     ok.
 
 
