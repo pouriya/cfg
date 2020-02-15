@@ -57,7 +57,8 @@ ok
 * Filter configuration parameters:  
 ```sh
 ~/cfg $ export BAR_KEY=value
-```
+```  
+```erlang
 1> cfg:read_and_filter([{shell, "BAR"}], []). % no filter
 {ok, []}
 
@@ -139,6 +140,55 @@ You can use above features in one function call:
 [{key, <<"value">>}, {undefined_key, 1995}]
 ```
 
+* **cfg** comes with a ready-to-use server process which supports reloading config on OS signals, reloading on timer and subscription to know changes in config during reload!  
+```erlang
+1> cfg:start_link(
+    {local, server}, % Server name
+    [{shell, "BAR"}], % Reader(s)
+    [{key, try_binary}, {undefined_key, try_integer, <<"1995">>}], % Filter(s)
+    {ets, tab_name}, % Keeper
+    #{ % Server options
+        reload_on_signal => sighup,
+        signal_handler_post_reload => fun(ok) -> io:format("Config reloaded!\n") end
+    }
+).
+{ok,<0.114.0>}
+
+2> os:getpid().
+"29867"
+
+3> os:cmd("kill -1 29867"), ok
+ok
+Config reloaded!
+
+4> cfg:subscribe(server, [{key, try_binary}]). % I want to know changes just for key
+ok
+
+5> os:cmd("kill -1 29867"), ok
+ok
+Config reloaded!
+
+6> flush().
+ok % value of 'key' did not change
+
+
+7> os:putenv("BAR_KEY", "value2").            
+true
+
+8> os:cmd("kill -1 29867"), ok
+ok
+Config reloaded!
+
+9> flush().
+Shell got {
+    config,
+    {
+        {value, [{key, <<"value">>}]}, % Old value 
+        {value,[{key, <<"value2">>}]}  % New value
+    }
+}
+ok
+```
 
 ## `Author`
 `pouriya.jahanbakhsh@gmail.com`
