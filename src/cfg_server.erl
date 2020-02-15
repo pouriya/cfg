@@ -233,12 +233,11 @@ handle_info(
     ?TIMEOUT_TAG,
     #?S{
         timer_state = TimerRef,
-        register_name = RegisterName,
         timer_pre_reload = PreReload,
         timer_post_reload = PostReload
     }=S
 ) when TimerRef /= undefined ->
-    try PreReload(RegisterName) of
+    try PreReload() of
         ok ->
             {Result, S2} =
                 case do_reload(S) of
@@ -247,7 +246,7 @@ handle_info(
                     Ok ->
                         Ok
                 end,
-            try PostReload(RegisterName, Result) of
+            try PostReload(Result) of
                 {error, Reason} ->
                     {stop, Reason, S2};
                 _ ->
@@ -417,7 +416,7 @@ handle_event(
                 RegisterName
         end,
     Result =
-        try PreReload(RegisterName) of
+        try PreReload() of
             ok ->
                 ReloadResult =
                     try
@@ -443,7 +442,7 @@ handle_event(
                             }
                     end,
                 try
-                    PostReload(RegisterName, ReloadResult)
+                    PostReload(ReloadResult)
                 catch
                     ?define_stacktrace(_, Reason2, Stacktrace2) ->
                         {
@@ -575,7 +574,7 @@ options(#{signal_handler_pre_reload := Value}=Opts, S) ->
         S#?S{
             signal_handler_pre_reload =
             if
-                erlang:is_function(Value, 1) ->
+                erlang:is_function(Value, 0) ->
                     Value;
                 true ->
                     ?DEFAULT_SIGNAL_HANDLER_PRE_RELOAD
@@ -589,7 +588,7 @@ options(#{signal_handler_post_reload := Value}=Opts, S) ->
         S#?S{
             signal_handler_post_reload =
             if
-                erlang:is_function(Value, 2) ->
+                erlang:is_function(Value, 1) ->
                     Value;
                 true ->
                     ?DEFAULT_SIGNAL_HANDLER_POST_RELOAD
@@ -633,7 +632,7 @@ options(#{timer_pre_reload := Value}=Opts, S) ->
         S#?S{
             timer_pre_reload =
             if
-                erlang:is_function(Value, 1) ->
+                erlang:is_function(Value, 0) ->
                     Value;
                 true ->
                     ?DEFAULT_TIMER_PRE_RELOAD
@@ -647,7 +646,7 @@ options(#{timer_post_reload := Value}=Opts, S) ->
         S#?S{
             timer_post_reload =
             if
-                erlang:is_function(Value, 2) ->
+                erlang:is_function(Value, 1) ->
                     Value;
                 true ->
                     ?DEFAULT_TIMER_POST_RELOAD
