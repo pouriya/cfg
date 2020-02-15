@@ -73,7 +73,7 @@ load(Readers, Filters, Keeper) ->
         {ok, Cfg}=Ok ->
             case init(Keeper) of
                 ok ->
-                    case set(Cfg, Keeper) of
+                    case set(Keeper, Cfg) of
                         ok ->
                             Ok;
                         {_, {Reason, ErrParams}} ->
