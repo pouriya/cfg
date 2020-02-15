@@ -106,7 +106,7 @@ ok
 6> cfg:read_and_filter([{shell, "BAR"}], [{key, try_binary}, {undefined_key, try_integer, <<"1995">>}]).
 {ok, [{key, <<"value">>}, {undefined_key, 1995}]}
 ```  
-**cfg** supports many ready-to-use filters and you can five your own filters to it. Also **cfg** can infer your wanted type from your default value!  
+**cfg** supports many ready-to-use filters and you can give your own filters to it. Also **cfg** can infer your wanted type from your default value!  
 
 * Keep configuration:  
 ```erlang
@@ -154,32 +154,35 @@ You can use above features in one function call:
 ).
 {ok,<0.114.0>}
 
-2> os:getpid().
+2> cfg:get({ets, tab_name}). % Get all configuration parameters
+{ok, [{key, <<"value">>}, {undefined_key, 1995}]}
+
+3> os:getpid().
 "29867"
 
-3> os:cmd("kill -1 29867"), ok
+4> os:cmd("kill -1 29867"), ok
 ok
 Config reloaded!
 
-4> cfg:subscribe(server, [{key, try_binary}]). % I want to know changes just for key
+5> cfg:subscribe(server, [{key, try_binary}]). % I want to know changes just for key
 ok
 
-5> os:cmd("kill -1 29867"), ok
+6> os:cmd("kill -1 29867"), ok
 ok
 Config reloaded!
 
-6> flush().
+7> flush().
 ok % value of 'key' did not change
 
 
-7> os:putenv("BAR_KEY", "value2").            
+8> os:putenv("BAR_KEY", "value2").            
 true
 
-8> os:cmd("kill -1 29867"), ok
+9> os:cmd("kill -1 29867"), ok
 ok
 Config reloaded!
 
-9> flush().
+10> flush().
 Shell got {
     config,
     {

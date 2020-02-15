@@ -1,0 +1,12 @@
+cfg_keeper                              100 %
+cfg_reader_erl                          0   %
+cfg_filter                              94  %
+cfg_reader_env                          75  %
+cfg_keeper_ets                          48  %
+cfg_reader_shell                        0   %
+cfg_server                              41  %
+cfg                                     57  %
+cfg_keeper_env                          2   %
+cfg_utils                               100 %
+cfg_reader                              100 %
+Total                                   66  %
