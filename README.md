@@ -200,5 +200,3 @@ Complete documentation about readers, filters, keeper and server.
 ## `Author`
 `pouriya.jahanbakhsh@gmail.com`
 
-## `Hex version`
-[**17.12.26**](https://hex.pm/packages/cfg)
